@@ -25,10 +25,10 @@ complete before the next begins. See `agents.md` HARD RULES.
 | 13 | Ranking & Statistics | Elo-ready rating service, leaderboard, win rate, streaks, rank | ✅ done (streaks land with game-history replay) |
 | 14 | Reconnection & Resilience | session recovery, state replay, disconnect timeout, optional AI takeover | ✅ done |
 | 15 | Security & Anti-Cheat | server-authoritative validation, rate limits, secure headers, hidden-info protection, WS validation, secret management | ✅ done (built-in from phases 4-14: auth at upgrade, membership/phase/turn checks, per-seat views, input caps, rate limits, headers; fair-projection test) |
-| 16 | Full Testing | unit + integration + E2E (Playwright) + multiplayer E2E + AI simulation batches (zero illegal moves) | planned |
-| 17 | Observability & Performance | structured logs, metrics (WS, engine, AI timing), error hooks | planned |
-| 18 | Production Docker | Dockerfiles, dev/prod compose, health checks, migrations, graceful shutdown | planned |
-| 19 | Documentation & Release | README, ARCHITECTURE, GAME_RULES, API, WEBSOCKET, AI, DATABASE, SECURITY, DEPLOYMENT, ADRs, release checklist | planned |
+| 16 | Full Testing | unit + integration + E2E (protocol-level in Go: 4-player match, human+AI, invalid actions, reconnection) + AI simulation batches (zero illegal moves); Playwright browser E2E = follow-up | done (browser E2E pending) |
+| 17 | Observability & Performance | structured logs, /api/metrics (http, ws sessions, active games, matches, AI decision time), error hooks | done |
+| 18 | Production Docker | single deployable (frontend baked into go image), prod compose with required secrets, healthchecks, migrations, graceful shutdown | done |
+| 19 | Documentation & Release | README, ARCHITECTURE, GAME_RULES, API, WEBSOCKET, AI, DATABASE, SECURITY, DEPLOYMENT, ADRs 0001-0009, release checklist | done |
 
 ## Game Rules (authoritative reference)
 
