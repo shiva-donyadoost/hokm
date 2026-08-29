@@ -28,9 +28,49 @@ services:
       timeout: 3s
       retries: 10
 
-  # backend and frontend services are added in Phases 3 and 8
-  # (see docs/IMPLEMENTATION_PLAN.md and ADR-0009)
+  backend:
+    build: ./backend
+    environment:
+      APP_ENV: development
+      APP_ADDR: ":8080"
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-insecure-secret-change-me-0123456789}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-hokm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me-dev-only}
+      POSTGRES_DB: ${POSTGRES_DB:-hokm}
+      REDIS_ADDR: redis:6379
+      ROUNDS_TO_WIN: ${ROUNDS_TO_WIN:-7}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  frontend:
+    image: node:24-alpine
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund && npm run dev"
+    environment:
+      npm_config_cache: /tmp/npm-cache
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:
   redisdata:
+  frontend_node_modules:
