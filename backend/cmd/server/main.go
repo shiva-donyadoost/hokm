@@ -12,8 +12,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/hokm/platform/internal/app"
+	"github.com/hokm/platform/internal/auth"
 	"github.com/hokm/platform/internal/config"
 	"github.com/hokm/platform/internal/httpapi"
+	"github.com/hokm/platform/internal/infra/memory"
 )
 
 func main() {
@@ -24,9 +27,15 @@ func main() {
 	}
 	setupLogging(cfg.LogLevel)
 
+	// Composition root. Postgres-backed repositories replace the in-memory
+	// stores in Phase 11 behind the same interfaces (ADR-0006).
+	tokens := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTTL)
+	users := app.NewUserService(memory.NewUserStore(), tokens,
+		auth.NewMemoryRefreshStore(), cfg.RefreshTTL)
+
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewServer().Handler(),
+		Handler:           httpapi.NewServer(users, tokens).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

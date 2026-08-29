@@ -13,7 +13,7 @@ complete before the next begins. See `agents.md` HARD RULES.
 | 1 | Domain Model & Hokm Game Engine | Card, Deck, Player, Team, Game, Round, Trick, Trump, Hakem, state machine, rule engine, scoring — pure Go, zero infra imports | ✅ done |
 | 2 | Comprehensive Game Engine Testing | 52-card invariants, dealing, hakem-by-ace, follow-suit, trick winner, turn rotation, scoring, completion; property tests + full-game invariants | ✅ done |
 | 3 | Go Backend Architecture | Clean architecture: domain / application / infrastructure / HTTP layers, config (env), DI wiring, slog logging, typed errors | ✅ done |
-| 4 | Authentication & Users | Register/login, bcrypt, JWT access+refresh, profile, authorization middleware | planned |
+| 4 | Authentication & Users | Register/login, bcrypt, JWT access+refresh, profile, authorization middleware | ✅ done |
 | 5 | Room & Lobby System | create/join/leave, public/private/friends, room code, lobby, ready, host, kick, AI slots | planned |
 | 6 | WebSocket Infrastructure | single authenticated WS endpoint, room subscription, command/event envelope, heartbeat, reconnect, disconnect handling | planned |
 | 7 | Multiplayer Gameplay | engine wired to rooms + WS; full real-time Hokm flow (hakem → trump → deal → 13 tricks → score) | planned |

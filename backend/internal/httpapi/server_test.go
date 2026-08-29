@@ -5,10 +5,24 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
+
+	"github.com/hokm/platform/internal/app"
+	"github.com/hokm/platform/internal/auth"
+	"github.com/hokm/platform/internal/infra/memory"
 )
 
+// newTestServer builds a fully wired server with in-memory stores.
+func newTestServer(t *testing.T) *Server {
+	t.Helper()
+	tokens := auth.NewTokenManager("test-secret-value-at-least-long", time.Minute)
+	users := app.NewUserService(memory.NewUserStore(), tokens,
+		auth.NewMemoryRefreshStore(), time.Hour)
+	return NewServer(users, tokens)
+}
+
 func TestHealthEndpoint(t *testing.T) {
-	s := NewServer()
+	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -25,7 +39,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestSecureHeadersPresent(t *testing.T) {
-	s := NewServer()
+	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
@@ -37,7 +51,7 @@ func TestSecureHeadersPresent(t *testing.T) {
 }
 
 func TestUnknownRouteIs404(t *testing.T) {
-	s := NewServer()
+	s := newTestServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/nope", nil)
 	rec := httptest.NewRecorder()
 	s.Handler().ServeHTTP(rec, req)
