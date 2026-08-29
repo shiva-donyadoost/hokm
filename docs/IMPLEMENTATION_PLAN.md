@@ -19,7 +19,7 @@ complete before the next begins. See `agents.md` HARD RULES.
 | 7 | Multiplayer Gameplay | engine wired to rooms + WS; full real-time Hokm flow (hakem → trump → deal → 13 tricks → score) | ✅ done |
 | 8 | Frontend | React + TypeScript (Vite): home, auth, profile, room browser, create/join, lobby, game table, results, leaderboard, history, settings | planned |
 | 9 | Mobile-First Game UI | player positions, hand, trick area, trump indicator, scores, turn/team indicators, animations, touch, responsive desktop | planned |
-| 10 | AI Engine | PlayerStrategy interface; Easy→Pro strategies; information-set reasoning (played cards, remaining, probabilities); RL-ready | planned |
+| 10 | AI Engine | PlayerStrategy interface; Easy→Pro strategies; information-set reasoning (played cards, remaining, probabilities); RL-ready | ✅ done (moved ahead of 8-9: completes the backend loop required by human+AI E2E) |
 | 11 | PostgreSQL & Redis | schema + migrations (users, profiles, rooms, games, players, teams, results, stats, ratings, chat, events); Redis active rooms/state/presence/sessions/rate limits | planned |
 | 12 | Chat & Social | room chat, system messages, presence, moderation, rate limiting | planned |
 | 13 | Ranking & Statistics | Elo-ready rating service, leaderboard, win rate, streaks, rank | planned |

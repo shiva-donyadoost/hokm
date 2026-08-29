@@ -132,6 +132,13 @@ func (g *Game) Events() []Event {
 	return out
 }
 
+// RoundsPlayed returns the total number of completed rounds.
+func (g *Game) RoundsPlayed() int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.roundsA + g.roundsB
+}
+
 // record appends events to the log and passes them through.
 func (g *Game) record(evs []Event) []Event {
 	g.eventLog = append(g.eventLog, evs...)

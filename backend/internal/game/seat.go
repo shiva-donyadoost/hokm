@@ -31,6 +31,9 @@ const (
 // order. Turn order proceeds seat0 → seat1 → seat2 → seat3 → seat0.
 func NextSeat(s Seat) Seat { return Seat((int(s) + 1) % playerCount) }
 
+// TricksPerRound exposes the tricks-per-round constant for external packages.
+func TricksPerRound() int { return tricksPerRound }
+
 // PartnerSeat returns the seat of s's partner.
 func PartnerSeat(s Seat) Seat { return Seat((int(s) + 2) % playerCount) }
 

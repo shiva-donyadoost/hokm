@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"sync"
+	"time"
 
+	"github.com/hokm/platform/internal/ai"
 	"github.com/hokm/platform/internal/game"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
@@ -21,13 +24,16 @@ var (
 )
 
 // Table binds one room to one running match. Sessions are the connected
-// humans; AI seats have nil sessions and are played by the AI engine later.
+// humans; AI seats have nil sessions and are played by the AI engine.
 type Table struct {
-	RoomID   string
-	mu       sync.Mutex
-	room     room.Room // frozen membership snapshot at start
-	g        *game.Game
-	sessions [4]*ws.Session // by seat; nil for AI or disconnected
+	RoomID     string
+	mu         sync.Mutex
+	room       room.Room // frozen membership snapshot at start
+	g          *game.Game
+	sessions   [4]*ws.Session // by seat; nil for AI or disconnected
+	ai         [4]ai.PlayerStrategy
+	rng        *rand.Rand
+	sentEvents int // events already broadcast
 }
 
 // TableManager implements ws.CommandHandler and orchestrates matches.
@@ -199,6 +205,12 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 		return err
 	}
 	t.g = g
+	t.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	for _, m := range rm.Members {
+		if m.IsAI {
+			t.ai[m.Seat] = ai.New(m.AIDifficulty, t.rng)
+		}
+	}
 	if _, err := g.StartGame(); err != nil {
 		return err
 	}
@@ -226,7 +238,7 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 			}
 		}
 	}
-	tm.broadcastLocked(t)
+	t.runAIAndBroadcast()
 	t.mu.Unlock()
 	return nil
 }
@@ -249,7 +261,7 @@ func (tm *TableManager) selectTrump(s *ws.Session, roomID string, suit game.Suit
 	if _, err := g.DealRemainingCards(); err != nil {
 		return err
 	}
-	tm.broadcastLocked(t)
+	t.runAIAndBroadcast()
 	return nil
 }
 
@@ -264,26 +276,7 @@ func (tm *TableManager) playCard(s *ws.Session, roomID string, card game.Card) e
 	if _, err := g.PlayCard(seat, card); err != nil {
 		return err
 	}
-	if g.Phase() == game.PhaseTrickPlay {
-		// CompleteTrick is server-driven once the trick is full.
-		if view := g.ViewFor(seat); len(view.CurrentTrick) == 4 {
-			if _, err := g.CompleteTrick(); err != nil {
-				slog.Error("table: complete trick", "err", err)
-			}
-		}
-	}
-	// Round/match completion is also server-driven.
-	if g.Phase() == game.PhaseRoundComplete {
-		if _, err := g.CompleteRound(); err != nil {
-			slog.Error("table: complete round", "err", err)
-		}
-	}
-	if g.Phase() == game.PhaseGameComplete {
-		if _, err := g.CompleteGame(); err != nil {
-			slog.Error("table: complete game", "err", err)
-		}
-	}
-	tm.broadcastLocked(t)
+	t.runAIAndBroadcast()
 	return nil
 }
 
@@ -321,10 +314,80 @@ func (tm *TableManager) sendStateLocked(t *Table, s *ws.Session) {
 	s.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(t.g.ViewFor(seat))})
 }
 
-// broadcastLocked sends per-seat views and public events to all seated
+// runAIAndBroadcast advances AI seats until a human must act or the match
+// ends, then pushes views + new public events to everyone. Caller holds t.mu.
+func (t *Table) runAIAndBroadcast() {
+	t.aiLoop()
+	t.broadcast()
+}
+
+// aiLoop applies engine commands for AI seats until a human turn or end.
+func (t *Table) aiLoop() {
+	g := t.g
+	steps := 0
+	for steps < 100000 {
+		steps++
+		switch g.Phase() {
+		case game.PhaseTrumpSelection:
+			seat := g.Hakem()
+			if t.ai[seat] == nil {
+				return
+			}
+			is := ai.BuildInformationSet(g.ViewFor(seat), publicEvents(g.Events()))
+			if _, err := g.SelectTrump(t.ai[seat].DecideTrump(is)); err != nil {
+				slog.Error("ai: select trump", "err", err)
+				return
+			}
+			if _, err := g.DealRemainingCards(); err != nil {
+				slog.Error("ai: deal remaining", "err", err)
+				return
+			}
+		case game.PhaseTrickPlay:
+			turn := g.ViewFor(game.Seat0).Turn
+			if turn == game.NoSeat {
+				if _, err := g.CompleteTrick(); err != nil {
+					slog.Error("ai: complete trick", "err", err)
+					return
+				}
+				continue
+			}
+			if t.ai[turn] == nil {
+				return // human must act
+			}
+			is := ai.BuildInformationSet(g.ViewFor(turn), publicEvents(g.Events()))
+			card := t.ai[turn].DecideCard(is)
+			if _, err := g.PlayCard(turn, card); err != nil {
+				slog.Error("ai: play card", "err", err, "card", card)
+				return
+			}
+		case game.PhaseRoundComplete:
+			if _, err := g.CompleteRound(); err != nil {
+				slog.Error("ai: complete round", "err", err)
+				return
+			}
+		case game.PhaseGameComplete:
+			if _, err := g.CompleteGame(); err != nil {
+				slog.Error("ai: complete game", "err", err)
+			}
+			return
+		default:
+			return
+		}
+	}
+}
+
+// broadcast sends per-seat views and *new* public events to all seated
 // sessions. Caller holds t.mu. Only public event kinds cross the wire.
-func (tm *TableManager) broadcastLocked(t *Table) {
-	public := publicEvents(t.g.Events())
+func (t *Table) broadcast() {
+	evs := t.g.Events()
+	fresh := evs
+	if t.sentEvents < len(evs) {
+		fresh = evs[t.sentEvents:]
+	} else {
+		fresh = nil
+	}
+	t.sentEvents = len(evs)
+	public := publicEvents(fresh)
 	for seat, sess := range t.sessions {
 		if sess == nil {
 			continue

@@ -182,12 +182,15 @@ func (c *wsClient) readUntil(pred func() bool, timeout time.Duration) {
 
 func (c *wsClient) myTurn() bool {
 	s, _ := c.snapshot()
+	return myTurnSt(s)
+}
+
+func myTurnSt(s game.SeatView) bool {
 	return s.Phase == game.PhaseTrickPlay && s.Turn == s.You &&
 		len(s.CurrentTrick) < 4 && !s.MatchOver
 }
 
-func (c *wsClient) legalCard() game.Card {
-	s, _ := c.snapshot()
+func legalCardSt(s game.SeatView) game.Card {
 	if len(s.CurrentTrick) > 0 {
 		lead := s.CurrentTrick[0].Card.Suit
 		for _, hc := range s.YourHand {
@@ -197,6 +200,64 @@ func (c *wsClient) legalCard() game.Card {
 		}
 	}
 	return s.YourHand[0]
+}
+
+func stateChanged(a, b game.SeatView) bool {
+	return a.Phase != b.Phase || a.Turn != b.Turn ||
+		len(a.CurrentTrick) != len(b.CurrentTrick) ||
+		len(a.YourHand) != len(b.YourHand) ||
+		a.Trump != b.Trump
+}
+
+// driveGame advances the match from any phase to completion: whenever it is
+// a client's turn it plays a legal card, waiting for a state change after
+// every action (never acting twice on the same snapshot).
+func driveGame(t *testing.T, clients []*wsClient, roomID string, timeout time.Duration) game.SeatView {
+	t.Helper()
+	deadline := time.After(timeout)
+	for {
+		for _, c := range clients {
+			c.drain(5 * time.Millisecond)
+		}
+		st, _ := clients[0].snapshot()
+		if st.Phase == game.PhaseGameComplete && st.MatchOver {
+			return st
+		}
+		acted := false
+		for _, c := range clients {
+			s, _ := c.snapshot()
+			if s.Phase == game.PhaseTrumpSelection && s.Hakem == s.You && s.Trump == "" {
+				c.send(ws.Envelope{Type: ws.CmdSelectTrump, Payload: mustJSONRaw(map[string]any{
+					"room_id": roomID, "suit": string(s.YourHand[0].Suit),
+				})})
+				acted = true
+				c.readUntil(func() bool {
+					ns, _ := c.snapshot()
+					return stateChanged(ns, s)
+				}, 5*time.Second)
+				break
+			}
+			if myTurnSt(s) {
+				card := legalCardSt(s)
+				c.send(ws.Envelope{Type: ws.CmdPlayCard, Payload: mustJSONRaw(map[string]any{
+					"room_id": roomID, "card": map[string]any{"suit": string(card.Suit), "rank": int(card.Rank)},
+				})})
+				acted = true
+				c.readUntil(func() bool {
+					ns, _ := c.snapshot()
+					return stateChanged(ns, s)
+				}, 5*time.Second)
+				break
+			}
+		}
+		if !acted {
+			select {
+			case <-deadline:
+				t.Fatalf("match stalled: phase=%s lastTrick=%+v", st.Phase, st.LastTrick)
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
 }
 
 // TestFullMultiplayerGameOverWS plays a complete 4-human match over WebSockets.
@@ -270,33 +331,10 @@ func TestFullMultiplayerGameOverWS(t *testing.T) {
 		}, 10*time.Second)
 	}
 
-	// Drive all 13 tricks.
-	deadline := time.After(60 * time.Second)
-	for {
-		acted := false
-		for _, c := range clients {
-			if c.myTurn() {
-				card := c.legalCard()
-				c.send(ws.Envelope{Type: ws.CmdPlayCard, Payload: mustJSONRaw(map[string]any{
-					"room_id": roomID, "card": map[string]any{"suit": string(card.Suit), "rank": int(card.Rank)},
-				})})
-				acted = true
-			}
-		}
-		for _, c := range clients {
-			c.drain(5 * time.Millisecond)
-		}
-		st0, _ := clients[0].snapshot()
-		if st0.Phase == game.PhaseGameComplete {
-			break
-		}
-		if !acted {
-			select {
-			case <-deadline:
-				t.Fatalf("match stalled: phase=%s lastTrick=%+v", st0.Phase, st0.LastTrick)
-			case <-time.After(20 * time.Millisecond):
-			}
-		}
+	// Drive all 13 tricks with the shared safe driver.
+	final := driveGame(t, clients, roomID, 60*time.Second)
+	if final.LastTrick == nil || final.LastTrick.Number != 13 {
+		t.Fatalf("last trick = %+v, want #13", final.LastTrick)
 	}
 
 	// Everyone must agree the match is over with a consistent result.
