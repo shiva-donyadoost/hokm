@@ -133,14 +133,17 @@ export function GameTable({ room, view }: GameTableProps) {
 
       {/* Overlays */}
       <button
-        className="fixed bottom-2 left-2 z-40 w-10 h-10 rounded-full bg-slate-900/90 border border-slate-700 text-lg"
+        className={`fixed bottom-2 left-2 z-40 px-3 py-2 rounded-full border text-sm font-semibold shadow-lg
+          ${chatOpen
+            ? 'bg-teal-600 border-teal-500 text-white'
+            : 'bg-slate-900/90 border-slate-600 text-slate-100'}`}
         onClick={() => setChatOpen((v) => !v)}
         aria-label="toggle chat"
       >
-        💬
+        💬 Chat
       </button>
       {chatOpen ? (
-        <div className="fixed bottom-14 left-2 z-40 w-72">
+        <div className="fixed bottom-14 left-2 z-40 w-72 shadow-2xl">
           <ChatPanel compact />
         </div>
       ) : null}
