@@ -61,6 +61,10 @@ services:
     command: sh -c "npm install --no-audit --no-fund && npm run dev"
     environment:
       npm_config_cache: /tmp/npm-cache
+      # File events don't propagate through Windows Docker bind mounts;
+      # polling makes vite hot-reload reliable (agents.md lesson).
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1500"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
