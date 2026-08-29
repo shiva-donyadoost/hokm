@@ -35,7 +35,7 @@ func newStack(t *testing.T) *stack {
 	rooms := room.NewManager()
 	tables := app.NewTableManager(rooms, tokens, 1) // RoundsToWin=1: one round decides
 	hub := ws.NewHub(tables)
-	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub).Handler())
+	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil).Handler())
 	t.Cleanup(ts.Close)
 	return &stack{ts: ts, client: ts.Client()}
 }

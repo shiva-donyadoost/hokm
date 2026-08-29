@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS statistics;
+DROP TABLE IF EXISTS game_events;
+DROP TABLE IF EXISTS game_players;
+DROP TABLE IF EXISTS games;
+DROP TABLE IF EXISTS rooms;
+DROP TABLE IF EXISTS refresh_tokens;
+DROP TABLE IF EXISTS users;

@@ -17,6 +17,8 @@ import (
 	"github.com/hokm/platform/internal/config"
 	"github.com/hokm/platform/internal/httpapi"
 	"github.com/hokm/platform/internal/infra/memory"
+	"github.com/hokm/platform/internal/infra/postgres"
+	"github.com/hokm/platform/internal/infra/redisx"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
 )
@@ -28,19 +30,39 @@ func main() {
 		os.Exit(1)
 	}
 	setupLogging(cfg.LogLevel)
+	ctx := context.Background()
 
-	// Composition root. Postgres-backed repositories replace the in-memory
-	// stores in Phase 11 behind the same interfaces (ADR-0006).
+	// Composition root. Durable stores replace in-memory ones when the
+	// databases are reachable (ADR-0006); otherwise the server degrades
+	// to memory-only with a warning.
+	var userRepo app.UserRepo = memory.NewUserStore()
+	var refreshStore auth.RefreshStore = auth.NewMemoryRefreshStore()
+	if pool, err := postgres.Connect(ctx, cfg.Postgres.DSN()); err != nil {
+		slog.Warn("postgres unavailable, using in-memory stores", "err", err)
+	} else {
+		defer pool.Close()
+		slog.Info("postgres connected, migrations applied")
+		userRepo = postgres.NewUserStore(pool)
+		refreshStore = postgres.NewRefreshStore(pool)
+	}
+
+	var limiter httpapi.Limiter
+	if rdb, err := redisx.NewClient(ctx, cfg.Redis.Addr); err != nil {
+		slog.Warn("redis unavailable, rate limiting disabled", "err", err)
+	} else {
+		defer func() { _ = rdb.Close() }()
+		limiter = redisx.NewRateLimiter(rdb, time.Minute, 60)
+	}
+
 	tokens := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTTL)
-	users := app.NewUserService(memory.NewUserStore(), tokens,
-		auth.NewMemoryRefreshStore(), cfg.RefreshTTL)
+	users := app.NewUserService(userRepo, tokens, refreshStore, cfg.RefreshTTL)
 	rooms := room.NewManager()
 	tables := app.NewTableManager(rooms, tokens, cfg.RoundsToWin)
 	hub := ws.NewHub(tables)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewServer(users, tokens, rooms, hub).Handler(),
+		Handler:           httpapi.NewServer(users, tokens, rooms, hub, limiter).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

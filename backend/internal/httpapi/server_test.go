@@ -20,7 +20,7 @@ func newTestServer(t *testing.T) *Server {
 	users := app.NewUserService(memory.NewUserStore(), tokens,
 		auth.NewMemoryRefreshStore(), time.Hour)
 	rooms := room.NewManager()
-	return NewServer(users, tokens, rooms, nil)
+	return NewServer(users, tokens, rooms, nil, nil)
 }
 
 func TestHealthEndpoint(t *testing.T) {

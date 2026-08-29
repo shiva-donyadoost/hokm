@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -11,26 +12,32 @@ import (
 	"github.com/hokm/platform/internal/ws"
 )
 
+// Limiter is the rate-limit hook (Redis-backed in production; nil disables).
+type Limiter interface {
+	Allow(key string) bool
+}
+
 // Server owns the HTTP mux and its dependencies. Construction is the
 // composition root for the transport layer (see cmd/server).
 type Server struct {
-	mux    *http.ServeMux
-	users  *app.UserService
-	tokens *auth.TokenManager
-	rooms  *room.Manager
-	hub    *ws.Hub
+	mux     *http.ServeMux
+	users   *app.UserService
+	tokens  *auth.TokenManager
+	rooms   *room.Manager
+	hub     *ws.Hub
+	limiter Limiter
 }
 
 // NewServer wires routes. Dependencies are added incrementally per phase;
 // unknown routes return 404 JSON.
-func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Manager, hub *ws.Hub) *Server {
-	s := &Server{mux: http.NewServeMux(), users: users, tokens: tokens, rooms: rooms, hub: hub}
+func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Manager, hub *ws.Hub, limiter Limiter) *Server {
+	s := &Server{mux: http.NewServeMux(), users: users, tokens: tokens, rooms: rooms, hub: hub, limiter: limiter}
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 
-	// Auth (Phase 4).
-	s.mux.HandleFunc("POST /api/auth/register", s.handleRegister)
-	s.mux.HandleFunc("POST /api/auth/login", s.handleLogin)
-	s.mux.HandleFunc("POST /api/auth/refresh", s.handleRefresh)
+	// Auth (Phase 4) — rate limited (Phase 11/15).
+	s.mux.Handle("POST /api/auth/register", s.limit(http.HandlerFunc(s.handleRegister)))
+	s.mux.Handle("POST /api/auth/login", s.limit(http.HandlerFunc(s.handleLogin)))
+	s.mux.Handle("POST /api/auth/refresh", s.limit(http.HandlerFunc(s.handleRefresh)))
 	s.mux.Handle("GET /api/me", s.RequireAuth(http.HandlerFunc(s.handleMe)))
 
 	// Rooms (Phase 5).
@@ -44,12 +51,32 @@ func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Ma
 	s.mux.Handle("POST /api/rooms/{id}/ai", s.RequireAuth(http.HandlerFunc(s.handleAddAI)))
 	s.mux.Handle("POST /api/rooms/{id}/ai/remove", s.RequireAuth(http.HandlerFunc(s.handleRemoveAI)))
 
-	// WebSocket (Phases 6-7).
+	// WebSocket (Phases 6-7) — rate limited on the upgrade handshake.
 	if hub != nil {
-		s.mux.HandleFunc("GET /api/ws", hub.ServeWS)
+		s.mux.Handle("GET /api/ws", s.limit(http.HandlerFunc(hub.ServeWS)))
 	}
 
 	return s
+}
+
+// limit applies the per-IP limiter when configured; fails open otherwise.
+func (s *Server) limit(next http.Handler) http.Handler {
+	if s.limiter == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.RemoteAddr
+		if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+			host = h
+		}
+		if !s.limiter.Allow(host) {
+			writeJSON(w, http.StatusTooManyRequests, &APIError{
+				Code: "rate_limited", Message: "too many requests, slow down",
+			})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // usernameFor resolves the display name for a user id via the user service.
