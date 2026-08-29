@@ -24,6 +24,7 @@ type Config struct {
 	Redis    RedisConfig
 
 	RoundsToWin int
+	TurnTimeout time.Duration
 }
 
 type PostgresConfig struct {
@@ -63,6 +64,7 @@ func Load() (*Config, error) {
 			Addr: get("REDIS_ADDR", "localhost:6379"),
 		},
 		RoundsToWin: getInt("ROUNDS_TO_WIN", 7),
+		TurnTimeout: time.Duration(getInt("TURN_TIMEOUT_SECONDS", 60)) * time.Second,
 	}
 	if c.Env != "development" && c.Env != "production" {
 		return nil, fmt.Errorf("config: invalid APP_ENV %q", c.Env)

@@ -23,7 +23,7 @@ complete before the next begins. See `agents.md` HARD RULES.
 | 11 | PostgreSQL & Redis | schema + migrations (users, profiles, rooms, games, players, teams, results, stats, ratings, chat, events); Redis active rooms/state/presence/sessions/rate limits | ✅ done (core: users/refresh durable + migrations + redis rate limiting/presence; game history writes land with 13) |
 | 12 | Chat & Social | room chat, system messages, presence, moderation, rate limiting | ✅ done |
 | 13 | Ranking & Statistics | Elo-ready rating service, leaderboard, win rate, streaks, rank | ✅ done (streaks land with game-history replay) |
-| 14 | Reconnection & Resilience | session recovery, state replay, disconnect timeout, optional AI takeover | planned |
+| 14 | Reconnection & Resilience | session recovery, state replay, disconnect timeout, optional AI takeover | ✅ done |
 | 15 | Security & Anti-Cheat | server-authoritative validation, rate limits, secure headers, hidden-info protection, WS validation, secret management | planned |
 | 16 | Full Testing | unit + integration + E2E (Playwright) + multiplayer E2E + AI simulation batches (zero illegal moves) | planned |
 | 17 | Observability & Performance | structured logs, metrics (WS, engine, AI timing), error hooks | planned |

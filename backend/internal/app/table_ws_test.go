@@ -366,3 +366,7 @@ func mustJSONRaw(v any) json.RawMessage {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+// httptestServer is a tiny alias so reconnect tests can build variants of
+// the standard stack fixture.
+func httptestServer(h http.Handler) *httptest.Server { return httptest.NewServer(h) }

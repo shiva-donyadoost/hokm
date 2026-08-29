@@ -27,14 +27,16 @@ var (
 // Table binds one room to one running match. Sessions are the connected
 // humans; AI seats have nil sessions and are played by the AI engine.
 type Table struct {
-	RoomID     string
-	mu         sync.Mutex
-	room       room.Room // frozen membership snapshot at start
-	g          *game.Game
-	sessions   [4]*ws.Session // by seat; nil for AI or disconnected
-	ai         [4]ai.PlayerStrategy
-	rng        *rand.Rand
-	sentEvents int // events already broadcast
+	RoomID       string
+	mu           sync.Mutex
+	room         room.Room // frozen membership snapshot at start
+	g            *game.Game
+	sessions     [4]*ws.Session // by seat; nil for AI or disconnected
+	ai           [4]ai.PlayerStrategy
+	fallback     ai.PlayerStrategy // plays for disconnected humans after the grace period
+	disconnected map[game.Seat]time.Time
+	rng          *rand.Rand
+	sentEvents   int // events already broadcast
 }
 
 // TableManager implements ws.CommandHandler and orchestrates matches.
@@ -45,6 +47,7 @@ type TableManager struct {
 	rooms       *room.Manager
 	tokens      tokenVerifier
 	roundsToWin int
+	turnTimeout time.Duration // disconnect grace before AI takeover
 	chat        *ChatService
 	scores      rating.ScoreStore            // nil â†’ stats not recorded
 	prevMembers map[string]map[string]string // roomID â†’ userID â†’ username
@@ -56,13 +59,21 @@ type tokenVerifier interface {
 	VerifyAccess(token string) (string, error)
 }
 
+// NewTableManager uses the default 60s disconnect grace period.
 func NewTableManager(rooms *room.Manager, tokens tokenVerifier, roundsToWin int, scores rating.ScoreStore) *TableManager {
+	return NewTableManagerWithTimeout(rooms, tokens, roundsToWin, scores, 60*time.Second)
+}
+
+// NewTableManagerWithTimeout tunes the disconnect grace period (tests use
+// short timeouts; see Phase 14).
+func NewTableManagerWithTimeout(rooms *room.Manager, tokens tokenVerifier, roundsToWin int, scores rating.ScoreStore, turnTimeout time.Duration) *TableManager {
 	tm := &TableManager{
 		tables:      make(map[string]*Table),
 		subs:        make(map[string]map[string]*ws.Session),
 		rooms:       rooms,
 		tokens:      tokens,
 		roundsToWin: roundsToWin,
+		turnTimeout: turnTimeout,
 		chat:        NewChatService(),
 		scores:      scores,
 		prevMembers: make(map[string]map[string]string),
@@ -156,6 +167,10 @@ func (tm *TableManager) OnDisconnect(s *ws.Session) {
 		for i := range t.sessions {
 			if t.sessions[i] == s {
 				t.sessions[i] = nil
+				// Mark the grace period for AI takeover (Phase 14).
+				if m, ok := t.memberAt(game.Seat(i)); ok && !m.IsAI && t.g != nil {
+					t.disconnected[game.Seat(i)] = time.Now().Add(tm.turnTimeout)
+				}
 			}
 		}
 		t.mu.Unlock()
@@ -251,6 +266,12 @@ func (tm *TableManager) subscribe(s *ws.Session, roomID string) error {
 	if table != nil {
 		table.mu.Lock()
 		defer table.mu.Unlock()
+		// Reconnect: rebind the session and clear any takeover deadline.
+		seat, ok := table.roomSeat(s.UserID)
+		if ok {
+			table.sessions[seat] = s
+			delete(table.disconnected, seat)
+		}
 		tm.sendStateLocked(table, s)
 	}
 	return nil
@@ -292,6 +313,8 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 			t.ai[m.Seat] = ai.New(m.AIDifficulty, t.rng)
 		}
 	}
+	t.fallback = ai.New("medium", t.rng)
+	t.disconnected = make(map[game.Seat]time.Time)
 	if _, err := g.StartGame(); err != nil {
 		return err
 	}
@@ -386,6 +409,16 @@ func (t *Table) roomSeat(userID string) (game.Seat, bool) {
 	return 0, false
 }
 
+// memberAt returns the member seated at the given seat.
+func (t *Table) memberAt(seat game.Seat) (room.Member, bool) {
+	for _, m := range t.room.Members {
+		if m.Seat == int(seat) {
+			return m, true
+		}
+	}
+	return room.Member{}, false
+}
+
 // sendStateLocked pushes the per-seat view to one session. Caller holds t.mu.
 func (tm *TableManager) sendStateLocked(t *Table, s *ws.Session) {
 	seat, ok := t.roomSeat(s.UserID)
@@ -412,7 +445,20 @@ func (t *Table) aiLoop(tm *TableManager) {
 		case game.PhaseTrumpSelection:
 			seat := g.Hakem()
 			if t.ai[seat] == nil {
-				return
+				// Human hakem — take over only if the grace period expired.
+				if !t.takeoverDue(seat) {
+					return
+				}
+				is := ai.BuildInformationSet(g.ViewFor(seat), publicEvents(g.Events()))
+				if _, err := g.SelectTrump(t.fallback.DecideTrump(is)); err != nil {
+					slog.Error("takeover: select trump", "err", err)
+					return
+				}
+				if _, err := g.DealRemainingCards(); err != nil {
+					slog.Error("takeover: deal remaining", "err", err)
+					return
+				}
+				continue
 			}
 			is := ai.BuildInformationSet(g.ViewFor(seat), publicEvents(g.Events()))
 			if _, err := g.SelectTrump(t.ai[seat].DecideTrump(is)); err != nil {
@@ -432,11 +478,16 @@ func (t *Table) aiLoop(tm *TableManager) {
 				}
 				continue
 			}
-			if t.ai[turn] == nil {
-				return // human must act
+			strat := t.ai[turn]
+			if strat == nil {
+				// Human turn — take over only if the grace period expired.
+				if !t.takeoverDue(turn) {
+					return // human must act
+				}
+				strat = t.fallback
 			}
 			is := ai.BuildInformationSet(g.ViewFor(turn), publicEvents(g.Events()))
-			card := t.ai[turn].DecideCard(is)
+			card := strat.DecideCard(is)
 			if _, err := g.PlayCard(turn, card); err != nil {
 				slog.Error("ai: play card", "err", err, "card", card)
 				return
@@ -457,6 +508,19 @@ func (t *Table) aiLoop(tm *TableManager) {
 			return
 		}
 	}
+}
+
+// takeoverDue reports whether the seat's disconnect grace has expired and
+// the fallback AI may act for it. Always false for connected seats.
+func (t *Table) takeoverDue(seat game.Seat) bool {
+	if _, ok := t.memberAt(seat); !ok {
+		return false
+	}
+	if t.sessions[seat] != nil {
+		return false // reconnected
+	}
+	until, was := t.disconnected[seat]
+	return was && time.Now().After(until)
 }
 
 // recordMatch persists stats/ratings for a finished match (human seats only).

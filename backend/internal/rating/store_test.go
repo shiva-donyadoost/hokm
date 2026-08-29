@@ -37,10 +37,17 @@ func TestMemoryStoreApplyMatch(t *testing.T) {
 	if ai.GamesPlayed != 0 {
 		t.Fatalf("AI should not be scored: %+v", ai)
 	}
-	// Leaderboard ranks winner first.
+	// Leaderboard: 3 humans sorted by rating — both winners (tied rating)
+	// must rank above the loser, regardless of map iteration order.
 	lb, _ := s.Leaderboard(10)
-	if len(lb) != 3 || lb[0].UserID != "h1" {
-		t.Fatalf("leaderboard wrong: %+v", lb)
+	if len(lb) != 3 {
+		t.Fatalf("leaderboard len = %d, want 3", len(lb))
+	}
+	if lb[len(lb)-1].UserID != "h3" {
+		t.Fatalf("loser should rank last: %+v", lb)
+	}
+	if lb[0].Rating != lb[1].Rating {
+		t.Fatalf("winners should share the same rating: %+v", lb)
 	}
 }
 
