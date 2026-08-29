@@ -1,0 +1,28 @@
+# --- Go ---
+backend/bin/
+*.exe
+*.test
+*.out
+
+# --- Node / Frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.local
+
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
+
+# --- Logs & artifacts ---
+*.log
+coverage/
+coverage.out
+tmp/
