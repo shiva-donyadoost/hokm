@@ -103,6 +103,14 @@ below. 7. Commit the fix.
    arrays can flatten unexpectedly; use explicit sub-expressions and index
    results (e.g. `@(... | Where-Object ...)[0]`). HEAD requests are
    unreliable for CDN existence checks — use ranged GETs (`--range 0-100`).
+6. **Vite dev server in Docker on Windows goes stale**: file-change events
+   do not propagate through Docker Desktop bind mounts, so a long-running
+   vite process keeps serving its old module graph even after the host
+   files change (symptom: new UI code "missing" despite hard refresh).
+   Fix: `CHOKIDAR_USEPOLLING=true` (+ interval) in the frontend compose
+   service, and recreate the container after large changes. Verify by
+   diffing the served module (`curl /src/<file>`) against disk, not by
+   trusting the browser.
 
 ### Engine (2026-08-29)
 
