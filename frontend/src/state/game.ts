@@ -3,6 +3,7 @@ import { getAccessToken } from '../api/client'
 import {
   Cmd,
   Msg,
+  type ChatMessage,
   type Envelope,
   type Room,
   type SeatView,
@@ -18,12 +19,14 @@ interface GameState {
   connected: boolean
   room: Room | null
   view: SeatView | null
+  chat: ChatMessage[]
   lastError: string | null
   connect: (roomId: string) => void
   disconnect: () => void
   startGame: () => void
   selectTrump: (suit: Suit) => void
   playCard: (card: { suit: Suit; rank: number }) => void
+  sendChat: (body: string) => void
 }
 
 let msgId = 0
@@ -37,6 +40,7 @@ export const useGame = create<GameState>((set, get) => ({
   connected: false,
   room: null,
   view: null,
+  chat: [],
   lastError: null,
 
   connect: (roomId) => {
@@ -47,7 +51,7 @@ export const useGame = create<GameState>((set, get) => ({
     const ws = new WebSocket(`${proto}://${location.host}/api/ws?token=${token}`)
 
     ws.onopen = () => {
-      set({ connected: true, room: null, view: null, lastError: null })
+      set({ connected: true, room: null, view: null, chat: [], lastError: null })
       ws.send(JSON.stringify({ type: Cmd.Subscribe, id: nextId(), payload: { room_id: roomId } } satisfies Envelope))
     }
     ws.onmessage = (e) => {
@@ -63,6 +67,9 @@ export const useGame = create<GameState>((set, get) => ({
           break
         case Msg.State:
           set({ view: env.payload as SeatView })
+          break
+        case Msg.Chat:
+          set((s) => ({ chat: [...s.chat, env.payload as ChatMessage] }))
           break
         case Msg.Error: {
           const p = env.payload as { code?: string; message?: string }
@@ -108,6 +115,14 @@ export const useGame = create<GameState>((set, get) => ({
     const roomId = g.room?.id
     if (g.ws && roomId && g.ws.readyState === WebSocket.OPEN) {
       g.ws.send(JSON.stringify({ type: Cmd.PlayCard, id: nextId(), payload: { room_id: roomId, card } } satisfies Envelope))
+    }
+  },
+
+  sendChat: (body) => {
+    const g = get()
+    const roomId = g.room?.id
+    if (g.ws && roomId && g.ws.readyState === WebSocket.OPEN) {
+      g.ws.send(JSON.stringify({ type: Cmd.Chat, id: nextId(), payload: { room_id: roomId, body } } satisfies Envelope))
     }
   },
 }))

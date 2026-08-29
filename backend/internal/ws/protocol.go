@@ -20,6 +20,7 @@ const (
 	CmdStartGame   = "START_GAME"   // payload: {room_id}
 	CmdSelectTrump = "SELECT_TRUMP" // payload: {room_id, suit}
 	CmdPlayCard    = "PLAY_CARD"    // payload: {room_id, card:{suit,rank}}
+	CmdChat        = "CHAT"         // payload: {room_id, body}
 )
 
 // Server message types.
@@ -27,6 +28,7 @@ const (
 	MsgState  = "STATE"  // payload: full per-seat game view
 	MsgEvents = "EVENTS" // payload: list of public events since last message
 	MsgRoom   = "ROOM"   // payload: room snapshot (lobby updates)
+	MsgChat   = "CHAT"   // payload: {room_id, user_id, username, body, is_system, at}
 	MsgError  = "ERROR"  // payload: {code, message}
 	MsgPong   = "PONG"
 )
@@ -54,6 +56,11 @@ type WireCard struct {
 
 type StartGamePayload struct {
 	RoomID string `json:"room_id"`
+}
+
+type ChatPayload struct {
+	RoomID string `json:"room_id"`
+	Body   string `json:"body"`
 }
 
 // ErrorPayload is the structured error body.

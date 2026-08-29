@@ -73,15 +73,27 @@ export const Cmd = {
   StartGame: 'START_GAME',
   SelectTrump: 'SELECT_TRUMP',
   PlayCard: 'PLAY_CARD',
+  Chat: 'CHAT',
 } as const
 
 export const Msg = {
   State: 'STATE',
   Events: 'EVENTS',
   Room: 'ROOM',
+  Chat: 'CHAT',
   Error: 'ERROR',
   Pong: 'PONG',
 } as const
+
+export interface ChatMessage {
+  id: number
+  room_id: string
+  user_id: string
+  username: string
+  body: string
+  is_system: boolean
+  at: string
+}
 
 // --- card helpers ---
 

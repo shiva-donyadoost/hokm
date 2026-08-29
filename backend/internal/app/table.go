@@ -44,6 +44,8 @@ type TableManager struct {
 	rooms       *room.Manager
 	tokens      tokenVerifier
 	roundsToWin int
+	chat        *ChatService
+	prevMembers map[string]map[string]string // roomID → userID → username
 }
 
 // tokenVerifier is the subset of auth.TokenManager we need (kept narrow so
@@ -59,22 +61,68 @@ func NewTableManager(rooms *room.Manager, tokens tokenVerifier, roundsToWin int)
 		rooms:       rooms,
 		tokens:      tokens,
 		roundsToWin: roundsToWin,
+		chat:        NewChatService(),
+		prevMembers: make(map[string]map[string]string),
 	}
 	rooms.SetNotifier(tm)
+	tm.chat.SetSink(tm)
 	return tm
 }
 
-// RoomUpdated fans out lobby snapshots to subscribers (room.Notifier).
-func (tm *TableManager) RoomUpdated(r room.Room) {
+// Chat exposes the chat service (for history on subscribe).
+func (tm *TableManager) Chat() *ChatService { return tm.chat }
+
+// ChatMessage implements ChatSink: fan chat out to room subscribers.
+func (tm *TableManager) ChatMessage(msg ChatMessage) {
 	tm.mu.RLock()
-	subs := tm.subs[r.ID]
+	subs := tm.subs[msg.RoomID]
 	sessions := make([]*ws.Session, 0, len(subs))
 	for _, s := range subs {
 		sessions = append(sessions, s)
 	}
 	tm.mu.RUnlock()
 	for _, s := range sessions {
+		s.Send(ws.Envelope{Type: ws.MsgChat, Payload: mustMarshal(msg)})
+	}
+}
+
+// RoomUpdated fans out lobby snapshots to subscribers (room.Notifier) and
+// emits system chat messages for membership changes. Chat emissions happen
+// after the manager lock is released to avoid re-entrant locking.
+func (tm *TableManager) RoomUpdated(r room.Room) {
+	var systemMsgs []string
+	tm.mu.Lock()
+	subs := tm.subs[r.ID]
+	sessions := make([]*ws.Session, 0, len(subs))
+	for _, s := range subs {
+		sessions = append(sessions, s)
+	}
+	// Diff membership for system messages.
+	current := make(map[string]string, len(r.Members))
+	for _, m := range r.Members {
+		current[m.UserID] = m.Username
+	}
+	prev := tm.prevMembers[r.ID]
+	if prev != nil {
+		for uid, name := range current {
+			if _, was := prev[uid]; !was {
+				systemMsgs = append(systemMsgs, name+" joined the room")
+			}
+		}
+		for uid, name := range prev {
+			if _, still := current[uid]; !still {
+				systemMsgs = append(systemMsgs, name+" left the room")
+			}
+		}
+	}
+	tm.prevMembers[r.ID] = current
+	tm.mu.Unlock()
+
+	for _, s := range sessions {
 		s.Send(ws.Envelope{Type: ws.MsgRoom, Payload: mustMarshal(r)})
+	}
+	for _, body := range systemMsgs {
+		tm.chat.System(r.ID, body)
 	}
 }
 
@@ -138,9 +186,35 @@ func (tm *TableManager) HandleCommand(s *ws.Session, env ws.Envelope) error {
 			return fmt.Errorf("bad payload")
 		}
 		return tm.playCard(s, p.RoomID, game.Card{Suit: game.Suit(p.Card.Suit), Rank: game.Rank(p.Card.Rank)})
+	case ws.CmdChat:
+		var p ws.ChatPayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return fmt.Errorf("bad payload")
+		}
+		return tm.sendChat(s, p.RoomID, p.Body)
 	default:
 		return fmt.Errorf("unknown command %q", env.Type)
 	}
+}
+
+// sendChat validates membership, appends to history, and broadcasts.
+func (tm *TableManager) sendChat(s *ws.Session, roomID, body string) error {
+	rm, err := tm.rooms.Get(roomID)
+	if err != nil {
+		return err
+	}
+	if !rm.InSeat(s.UserID) {
+		return ErrNotSubscribed
+	}
+	username := s.UserID
+	for _, m := range rm.Members {
+		if m.UserID == s.UserID {
+			username = m.Username
+			break
+		}
+	}
+	_, err = tm.chat.Send(roomID, s.UserID, username, body)
+	return err
 }
 
 // subscribe registers a session for a room's updates. Membership is
@@ -166,6 +240,10 @@ func (tm *TableManager) subscribe(s *ws.Session, roomID string) error {
 
 	// Lobby snapshot.
 	s.Send(ws.Envelope{Type: ws.MsgRoom, Payload: mustMarshal(rm)})
+	// Chat history so the client renders the recent conversation.
+	for _, msg := range tm.chat.History(roomID, 50) {
+		s.Send(ws.Envelope{Type: ws.MsgChat, Payload: mustMarshal(msg)})
+	}
 	// Live game snapshot if a table exists.
 	if table != nil {
 		table.mu.Lock()

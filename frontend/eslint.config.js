@@ -22,6 +22,7 @@ export default [
         setTimeout: 'readonly',
         console: 'readonly',
         HTMLElement: 'readonly',
+        HTMLDivElement: 'readonly',
         HTMLInputElement: 'readonly',
         HTMLSelectElement: 'readonly',
       },

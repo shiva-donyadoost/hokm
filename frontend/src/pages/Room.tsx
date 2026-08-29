@@ -4,6 +4,7 @@ import { api } from '../api/client'
 import { useAuth } from '../state/auth'
 import { useGame } from '../state/game'
 import { GameTable } from '../components/GameTable'
+import { ChatPanel } from '../components/ChatPanel'
 import { CardBack } from '../components/Card'
 import { Header } from './Rooms'
 
@@ -213,6 +214,8 @@ export function Room() {
           {humans < 4 ? 'waiting for the host to start…' : 'waiting for ready…'}
         </p>
       )}
+
+      <ChatPanel />
 
       <p className="text-center text-xs text-slate-600 mt-4">
         {connected ? '🟢 connected' : '🔴 disconnected'} · share code{' '}

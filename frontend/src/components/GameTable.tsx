@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Card } from './Card'
 import { PlayerSeat } from './PlayerSeat'
 import { TrickArea } from './TrickArea'
+import { ChatPanel } from './ChatPanel'
 import { useGame } from '../state/game'
 import {
   Suits,
@@ -24,6 +25,7 @@ export function GameTable({ room, view }: GameTableProps) {
   const playCard = useGame((s) => s.playCard)
   const selectTrump = useGame((s) => s.selectTrump)
   const lastError = useGame((s) => s.lastError)
+  const [chatOpen, setChatOpen] = useState(false)
 
   const legalSuits = useMemo(() => {
     const trick = view.current_trick
@@ -130,6 +132,19 @@ export function GameTable({ room, view }: GameTableProps) {
       </div>
 
       {/* Overlays */}
+      <button
+        className="fixed bottom-2 left-2 z-40 w-10 h-10 rounded-full bg-slate-900/90 border border-slate-700 text-lg"
+        onClick={() => setChatOpen((v) => !v)}
+        aria-label="toggle chat"
+      >
+        💬
+      </button>
+      {chatOpen ? (
+        <div className="fixed bottom-14 left-2 z-40 w-72">
+          <ChatPanel compact />
+        </div>
+      ) : null}
+
       {trumpPending ? (
         <div className="fixed inset-x-0 bottom-0 p-4 bg-slate-900/95 border-t border-amber-400/40">
           <p className="text-center text-sm text-amber-300 mb-2">
