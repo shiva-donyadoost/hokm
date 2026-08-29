@@ -104,6 +104,17 @@ below. 7. Commit the fix.
    results (e.g. `@(... | Where-Object ...)[0]`). HEAD requests are
    unreliable for CDN existence checks — use ranged GETs (`--range 0-100`).
 
+### Engine (2026-08-29)
+
+6. **Lead-suit must be captured on the first card of a trick**: the initial
+   `PlayCard` implementation appended the card but never set
+   `Trick.LeadSuit`, so follow-suit validation silently never fired (empty
+   suit matched no hand). Caught by a scripted unit test, not by the random
+   simulation — legal bots happened to follow suit anyway. Lesson: invariant
+   simulations pass even when *optional* rules (like following suit) are
+   unenforced, because random/first-card play rarely violates them. Always
+   pair property tests with targeted negative tests for each rule.
+
 ---
 
 ## PROJECT CONVENTIONS
