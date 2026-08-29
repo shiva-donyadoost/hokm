@@ -3,6 +3,8 @@ package httpapi
 import (
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -64,7 +66,31 @@ func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Ma
 		s.mux.Handle("GET /api/ws", s.limit(http.HandlerFunc(hub.ServeWS)))
 	}
 
+	// Static frontend (Phase 18): when WEB_DIR is set, serve the built SPA
+	// with an index.html fallback for client-side routes.
+	if dir := os.Getenv("WEB_DIR"); dir != "" {
+		s.mountStatic(dir)
+	}
+
 	return s
+}
+
+// mountStatic serves static assets with SPA fallback. API routes keep
+// precedence because the mux matches the most specific pattern first.
+func (s *Server) mountStatic(dir string) {
+	fileServer := http.FileServer(http.Dir(dir))
+	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			writeError(w, r, apiError(http.StatusMethodNotAllowed, "method", "method not allowed"))
+			return
+		}
+		p := filepath.Join(dir, filepath.Clean("/"+r.URL.Path))
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(dir, "index.html"))
+	})
 }
 
 // handleLeaderboard returns the top players by rating.

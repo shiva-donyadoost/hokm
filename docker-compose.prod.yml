@@ -1,0 +1,70 @@
+# Production stack (ADR-0009/Phase 18). Requires a real JWT_SECRET in the
+# environment:  JWT_SECRET=<32+ chars>  POSTGRES_PASSWORD=<strong>
+#
+#   docker compose -f docker-compose.prod.yml up --build -d
+#
+# The single backend deployment serves the API, WebSocket, and the built
+# frontend on port 8080.
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hokm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-hokm}
+    volumes:
+      - pgdata_prod:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata_prod:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment:
+      APP_ENV: production
+      APP_ADDR: ":8080"
+      LOG_LEVEL: info
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET to 32+ chars}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-hokm}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-hokm}
+      REDIS_ADDR: redis:6379
+      ROUNDS_TO_WIN: ${ROUNDS_TO_WIN:-7}
+      TURN_TIMEOUT_SECONDS: ${TURN_TIMEOUT_SECONDS:-60}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  pgdata_prod:
+  redisdata_prod:
