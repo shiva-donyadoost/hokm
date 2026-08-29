@@ -8,6 +8,7 @@ import (
 
 	"github.com/hokm/platform/internal/app"
 	"github.com/hokm/platform/internal/auth"
+	"github.com/hokm/platform/internal/metrics"
 	"github.com/hokm/platform/internal/rating"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
@@ -35,6 +36,7 @@ type Server struct {
 func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Manager, hub *ws.Hub, limiter Limiter, scores rating.ScoreStore) *Server {
 	s := &Server{mux: http.NewServeMux(), users: users, tokens: tokens, rooms: rooms, hub: hub, limiter: limiter, scores: scores}
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
+	s.mux.HandleFunc("GET /api/metrics", s.handleMetrics)
 
 	// Auth (Phase 4) — rate limited (Phase 11/15).
 	s.mux.Handle("POST /api/auth/register", s.limit(http.HandlerFunc(s.handleRegister)))
@@ -137,6 +139,12 @@ func (s *Server) Handler() http.Handler {
 // handleHealth is the liveness probe used by Docker healthchecks.
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleMetrics exposes Prometheus text metrics (Phase 17).
+func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	_, _ = w.Write([]byte(metrics.Render()))
 }
 
 // DefaultTokenManager builds the server's token manager from config values.

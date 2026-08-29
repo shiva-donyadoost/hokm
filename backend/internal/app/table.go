@@ -11,6 +11,7 @@ import (
 
 	"github.com/hokm/platform/internal/ai"
 	"github.com/hokm/platform/internal/game"
+	"github.com/hokm/platform/internal/metrics"
 	"github.com/hokm/platform/internal/rating"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
@@ -42,15 +43,15 @@ type Table struct {
 // TableManager implements ws.CommandHandler and orchestrates matches.
 type TableManager struct {
 	mu          sync.RWMutex
-	tables      map[string]*Table                 // roomID â†’ table
-	subs        map[string]map[string]*ws.Session // roomID â†’ userID â†’ session
+	tables      map[string]*Table                 // roomID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ table
+	subs        map[string]map[string]*ws.Session // roomID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ userID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ session
 	rooms       *room.Manager
 	tokens      tokenVerifier
 	roundsToWin int
 	turnTimeout time.Duration // disconnect grace before AI takeover
 	chat        *ChatService
-	scores      rating.ScoreStore            // nil â†’ stats not recorded
-	prevMembers map[string]map[string]string // roomID â†’ userID â†’ username
+	scores      rating.ScoreStore            // nil ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ stats not recorded
+	prevMembers map[string]map[string]string // roomID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ userID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ username
 }
 
 // tokenVerifier is the subset of auth.TokenManager we need (kept narrow so
@@ -327,6 +328,7 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 	tm.mu.Lock()
 	tm.tables[roomID] = t
 	tm.mu.Unlock()
+	metrics.GamesDelta(1)
 	if err := tm.rooms.MarkStarted(roomID); err != nil {
 		return err
 	}
@@ -445,7 +447,7 @@ func (t *Table) aiLoop(tm *TableManager) {
 		case game.PhaseTrumpSelection:
 			seat := g.Hakem()
 			if t.ai[seat] == nil {
-				// Human hakem — take over only if the grace period expired.
+				// Human hakem Ã¢â‚¬â€ take over only if the grace period expired.
 				if !t.takeoverDue(seat) {
 					return
 				}
@@ -461,7 +463,10 @@ func (t *Table) aiLoop(tm *TableManager) {
 				continue
 			}
 			is := ai.BuildInformationSet(g.ViewFor(seat), publicEvents(g.Events()))
-			if _, err := g.SelectTrump(t.ai[seat].DecideTrump(is)); err != nil {
+			start := time.Now()
+			suit := t.ai[seat].DecideTrump(is)
+			metrics.ObserveAIDecision(time.Since(start).Nanoseconds())
+			if _, err := g.SelectTrump(suit); err != nil {
 				slog.Error("ai: select trump", "err", err)
 				return
 			}
@@ -480,14 +485,16 @@ func (t *Table) aiLoop(tm *TableManager) {
 			}
 			strat := t.ai[turn]
 			if strat == nil {
-				// Human turn — take over only if the grace period expired.
+				// Human turn Ã¢â‚¬â€ take over only if the grace period expired.
 				if !t.takeoverDue(turn) {
 					return // human must act
 				}
 				strat = t.fallback
 			}
 			is := ai.BuildInformationSet(g.ViewFor(turn), publicEvents(g.Events()))
+			start := time.Now()
 			card := strat.DecideCard(is)
+			metrics.ObserveAIDecision(time.Since(start).Nanoseconds())
 			if _, err := g.PlayCard(turn, card); err != nil {
 				slog.Error("ai: play card", "err", err, "card", card)
 				return
@@ -552,6 +559,8 @@ func (tm *TableManager) recordMatch(t *Table, evs []game.Event) {
 	if err := tm.scores.ApplyMatch(rec); err != nil {
 		slog.Error("record match", "err", err)
 	}
+	metrics.GamesDelta(-1)
+	metrics.MatchesInc()
 }
 
 // broadcast sends per-seat views and *new* public events to all seated

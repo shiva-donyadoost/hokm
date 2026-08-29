@@ -24,7 +24,7 @@ complete before the next begins. See `agents.md` HARD RULES.
 | 12 | Chat & Social | room chat, system messages, presence, moderation, rate limiting | ✅ done |
 | 13 | Ranking & Statistics | Elo-ready rating service, leaderboard, win rate, streaks, rank | ✅ done (streaks land with game-history replay) |
 | 14 | Reconnection & Resilience | session recovery, state replay, disconnect timeout, optional AI takeover | ✅ done |
-| 15 | Security & Anti-Cheat | server-authoritative validation, rate limits, secure headers, hidden-info protection, WS validation, secret management | planned |
+| 15 | Security & Anti-Cheat | server-authoritative validation, rate limits, secure headers, hidden-info protection, WS validation, secret management | ✅ done (built-in from phases 4-14: auth at upgrade, membership/phase/turn checks, per-seat views, input caps, rate limits, headers; fair-projection test) |
 | 16 | Full Testing | unit + integration + E2E (Playwright) + multiplayer E2E + AI simulation batches (zero illegal moves) | planned |
 | 17 | Observability & Performance | structured logs, metrics (WS, engine, AI timing), error hooks | planned |
 | 18 | Production Docker | Dockerfiles, dev/prod compose, health checks, migrations, graceful shutdown | planned |

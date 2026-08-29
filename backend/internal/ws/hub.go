@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/websocket"
+
+	"github.com/hokm/platform/internal/metrics"
 )
 
 // CommandHandler processes authenticated client commands. Implemented by
@@ -50,7 +52,9 @@ func (h *Hub) ServeWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := NewSession(conn, userID, username)
+	metrics.WSSessions(1)
 	go func() {
+		defer metrics.WSSessions(-1)
 		defer h.handler.OnDisconnect(s)
 		s.ReadPump(h.onMessage)
 	}()

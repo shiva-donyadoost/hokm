@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"runtime/debug"
 	"time"
+
+	"github.com/hokm/platform/internal/metrics"
 )
 
 // statusRecorder captures the response status for request logging. It
@@ -39,7 +41,8 @@ func (r *statusRecorder) Flush() {
 	}
 }
 
-// loggingMiddleware logs every request with duration and status.
+// loggingMiddleware logs every request with duration and status, and
+// records the request in the metrics registry (Phase 17).
 func loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -51,6 +54,7 @@ func loggingMiddleware(next http.Handler) http.Handler {
 			"status", rec.status,
 			"duration_ms", time.Since(start).Milliseconds(),
 		)
+		metrics.IncHTTP(r.Method, r.URL.Path, rec.status)
 	})
 }
 
