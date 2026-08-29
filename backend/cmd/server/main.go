@@ -17,6 +17,7 @@ import (
 	"github.com/hokm/platform/internal/config"
 	"github.com/hokm/platform/internal/httpapi"
 	"github.com/hokm/platform/internal/infra/memory"
+	"github.com/hokm/platform/internal/room"
 )
 
 func main() {
@@ -32,10 +33,11 @@ func main() {
 	tokens := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTTL)
 	users := app.NewUserService(memory.NewUserStore(), tokens,
 		auth.NewMemoryRefreshStore(), cfg.RefreshTTL)
+	rooms := room.NewManager()
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewServer(users, tokens).Handler(),
+		Handler:           httpapi.NewServer(users, tokens, rooms).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

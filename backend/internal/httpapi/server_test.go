@@ -10,6 +10,7 @@ import (
 	"github.com/hokm/platform/internal/app"
 	"github.com/hokm/platform/internal/auth"
 	"github.com/hokm/platform/internal/infra/memory"
+	"github.com/hokm/platform/internal/room"
 )
 
 // newTestServer builds a fully wired server with in-memory stores.
@@ -18,7 +19,8 @@ func newTestServer(t *testing.T) *Server {
 	tokens := auth.NewTokenManager("test-secret-value-at-least-long", time.Minute)
 	users := app.NewUserService(memory.NewUserStore(), tokens,
 		auth.NewMemoryRefreshStore(), time.Hour)
-	return NewServer(users, tokens)
+	rooms := room.NewManager()
+	return NewServer(users, tokens, rooms)
 }
 
 func TestHealthEndpoint(t *testing.T) {
