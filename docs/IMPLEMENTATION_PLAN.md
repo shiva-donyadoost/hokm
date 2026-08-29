@@ -15,8 +15,8 @@ complete before the next begins. See `agents.md` HARD RULES.
 | 3 | Go Backend Architecture | Clean architecture: domain / application / infrastructure / HTTP layers, config (env), DI wiring, slog logging, typed errors | ✅ done |
 | 4 | Authentication & Users | Register/login, bcrypt, JWT access+refresh, profile, authorization middleware | ✅ done |
 | 5 | Room & Lobby System | create/join/leave, public/private/friends, room code, lobby, ready, host, kick, AI slots | ✅ done |
-| 6 | WebSocket Infrastructure | single authenticated WS endpoint, room subscription, command/event envelope, heartbeat, reconnect, disconnect handling | planned |
-| 7 | Multiplayer Gameplay | engine wired to rooms + WS; full real-time Hokm flow (hakem → trump → deal → 13 tricks → score) | planned |
+| 6 | WebSocket Infrastructure | single authenticated WS endpoint, room subscription, command/event envelope, heartbeat, reconnect, disconnect handling | ✅ done |
+| 7 | Multiplayer Gameplay | engine wired to rooms + WS; full real-time Hokm flow (hakem → trump → deal → 13 tricks → score) | ✅ done |
 | 8 | Frontend | React + TypeScript (Vite): home, auth, profile, room browser, create/join, lobby, game table, results, leaderboard, history, settings | planned |
 | 9 | Mobile-First Game UI | player positions, hand, trick area, trump indicator, scores, turn/team indicators, animations, touch, responsive desktop | planned |
 | 10 | AI Engine | PlayerStrategy interface; Easy→Pro strategies; information-set reasoning (played cards, remaining, probabilities); RL-ready | planned |

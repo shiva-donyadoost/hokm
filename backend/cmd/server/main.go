@@ -18,6 +18,7 @@ import (
 	"github.com/hokm/platform/internal/httpapi"
 	"github.com/hokm/platform/internal/infra/memory"
 	"github.com/hokm/platform/internal/room"
+	"github.com/hokm/platform/internal/ws"
 )
 
 func main() {
@@ -34,10 +35,12 @@ func main() {
 	users := app.NewUserService(memory.NewUserStore(), tokens,
 		auth.NewMemoryRefreshStore(), cfg.RefreshTTL)
 	rooms := room.NewManager()
+	tables := app.NewTableManager(rooms, tokens, cfg.RoundsToWin)
+	hub := ws.NewHub(tables)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewServer(users, tokens, rooms).Handler(),
+		Handler:           httpapi.NewServer(users, tokens, rooms, hub).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

@@ -72,6 +72,7 @@ type Game struct {
 	roundsA, roundsB int
 
 	gameCompleted bool
+	eventLog      []Event
 }
 
 // NewGame creates a match for four distinct players. The first player
@@ -122,6 +123,21 @@ func (g *Game) Trump() Suit {
 	return g.trump
 }
 
+// Events returns a copy of the full event log since the match started.
+func (g *Game) Events() []Event {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	out := make([]Event, len(g.eventLog))
+	copy(out, g.eventLog)
+	return out
+}
+
+// record appends events to the log and passes them through.
+func (g *Game) record(evs []Event) []Event {
+	g.eventLog = append(g.eventLog, evs...)
+	return evs
+}
+
 // SeatOf maps a player ID to its seat.
 func (g *Game) SeatOf(playerID string) (Seat, bool) {
 	g.mu.Lock()
@@ -145,7 +161,8 @@ func (g *Game) StartGame() ([]Event, error) {
 	g.roundNumber = 1
 	g.deck = g.nextDeck()
 	g.phase = PhaseHakemSelection
-	return []Event{{Kind: EventNextRoundStarted, Data: NextRoundStartedData{Number: 1}}}, nil
+	evs := []Event{{Kind: EventNextRoundStarted, Data: NextRoundStartedData{Number: 1}}}
+	return g.record(evs), nil
 }
 
 // SelectHakem runs the ace-draw: cards are turned one at a time starting
@@ -177,10 +194,8 @@ func (g *Game) SelectHakem() ([]Event, error) {
 		seat = NextSeat(seat)
 	}
 	g.hakem = hakem
-	return []Event{{
-		Kind: EventHakemSelected,
-		Data: HakemSelectedData{Seat: hakem, Card: aceCard},
-	}}, nil
+	evs := []Event{{Kind: EventHakemSelected, Data: HakemSelectedData{Seat: hakem, Card: aceCard}}}
+	return g.record(evs), nil
 }
 
 // DealInitialCards deals five cards to each player starting left of the
@@ -194,7 +209,7 @@ func (g *Game) DealInitialCards() ([]Event, error) {
 	g.deck = g.nextDeck() // fold any hakem-draw cards back in
 	events := g.dealLocked(EventInitialCardsDealt, initialDealCount)
 	g.phase = PhaseTrumpSelection
-	return events, nil
+	return g.record(events), nil
 }
 
 // SelectTrump lets the hakem choose the trump suit before the remaining
@@ -213,10 +228,8 @@ func (g *Game) SelectTrump(suit Suit) ([]Event, error) {
 	}
 	g.trump = suit
 	g.trumpSet = true
-	return []Event{{
-		Kind: EventTrumpSelected,
-		Data: TrumpSelectedData{Seat: g.hakem, Suit: suit},
-	}}, nil
+	evs := []Event{{Kind: EventTrumpSelected, Data: TrumpSelectedData{Seat: g.hakem, Suit: suit}}}
+	return g.record(evs), nil
 }
 
 // DealRemainingCards deals the remaining eight cards to each player.
@@ -229,7 +242,7 @@ func (g *Game) DealRemainingCards() ([]Event, error) {
 	events := g.dealLocked(EventCardsDealt, remainingDealCount)
 	g.phase = PhaseTrickPlay
 	g.turn = g.hakem // hakem leads the first trick
-	return events, nil
+	return g.record(events), nil
 }
 
 // PlayCard plays a card from the seat's hand into the current trick.
@@ -264,7 +277,8 @@ func (g *Game) PlayCard(s Seat, c Card) ([]Event, error) {
 	} else {
 		g.turn = NextSeat(s)
 	}
-	return []Event{{Kind: EventCardPlayed, Data: CardPlayedData{Seat: s, Card: c}}}, nil
+	evs := []Event{{Kind: EventCardPlayed, Data: CardPlayedData{Seat: s, Card: c}}}
+	return g.record(evs), nil
 }
 
 // CompleteTrick resolves a full trick, records it, and either hands the
@@ -297,14 +311,14 @@ func (g *Game) CompleteTrick() ([]Event, error) {
 		g.tricksB++
 	}
 	events := []Event{{Kind: EventTrickCompleted, Data: TrickCompletedData{Trick: ct}}}
-
+	g.record(events)
 	g.trick = Trick{}
 	if g.tricksPlayed == tricksPerRound {
 		g.phase = PhaseRoundComplete
 		g.turn = NoSeat
-		return events, nil
+	} else {
+		g.turn = winner
 	}
-	g.turn = winner
 	return events, nil
 }
 
@@ -340,7 +354,7 @@ func (g *Game) CompleteRound() ([]Event, error) {
 	}}
 	if matchOver {
 		g.phase = PhaseGameComplete
-		return events, nil
+		return g.record(events), nil
 	}
 	// Hakem rotation: hakem keeps the role while their team wins; on a
 	// loss it passes to the next seat (standard rule, configurable).
@@ -355,7 +369,7 @@ func (g *Game) CompleteRound() ([]Event, error) {
 		Kind: EventNextRoundStarted,
 		Data: NextRoundStartedData{Number: g.roundNumber, Hakem: g.hakem},
 	})
-	return events, nil
+	return g.record(events), nil
 }
 
 // CompleteGame finalizes a decided match and emits the terminal event.
@@ -374,10 +388,10 @@ func (g *Game) CompleteGame() ([]Event, error) {
 		winner = TeamB
 	}
 	g.gameCompleted = true
-	return []Event{{
+	return g.record([]Event{{
 		Kind: EventGameCompleted,
 		Data: GameCompletedData{WinnerTeam: winner, RoundsWonA: g.roundsA, RoundsWonB: g.roundsB},
-	}}, nil
+	}}), nil
 }
 
 // --- internals ---

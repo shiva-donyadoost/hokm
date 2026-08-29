@@ -115,6 +115,22 @@ below. 7. Commit the fix.
    unenforced, because random/first-card play rarely violates them. Always
    pair property tests with targeted negative tests for each rule.
 
+### Transport (2026-08-29)
+
+7. **Middleware must preserve `http.Hijacker` for WebSocket upgrades**:
+   wrapping the mux with a logging `ResponseWriter` broke gorilla's
+   handshake (`response does not implement http.Hijacker`) — only visible
+   through a real upgrade test, never with plain httptest handler tests.
+   Fix: delegate `Hijack()`/`Flush()` on the recorder. Lesson: any custom
+   `ResponseWriter` wrapper must implement `http.Hijacker` and
+   `http.Flusher` pass-through, and WebSocket support requires an
+   end-to-end upgrade test, not just handler tests.
+8. **gorilla/websocket forbids repeated reads after a failed read**: the
+   first E2E client polled `ReadJSON` after a deadline error and panicked
+   with "repeated read on failed websocket connection". Fix: one dedicated
+   reader goroutine per client feeding a channel; assertions consume the
+   channel with deadlines.
+
 ---
 
 ## PROJECT CONVENTIONS

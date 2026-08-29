@@ -1,0 +1,360 @@
+package app
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"sync"
+
+	"github.com/hokm/platform/internal/game"
+	"github.com/hokm/platform/internal/room"
+	"github.com/hokm/platform/internal/ws"
+)
+
+var (
+	ErrTableNotFound = errors.New("app: table not found for room")
+	ErrNotAllReady   = errors.New("app: not all members are ready")
+	ErrNeedFourSeats = errors.New("app: room needs exactly four seated members")
+	ErrNotSubscribed = errors.New("app: not subscribed to this room")
+	ErrInternal      = errors.New("app: internal error")
+)
+
+// Table binds one room to one running match. Sessions are the connected
+// humans; AI seats have nil sessions and are played by the AI engine later.
+type Table struct {
+	RoomID   string
+	mu       sync.Mutex
+	room     room.Room // frozen membership snapshot at start
+	g        *game.Game
+	sessions [4]*ws.Session // by seat; nil for AI or disconnected
+}
+
+// TableManager implements ws.CommandHandler and orchestrates matches.
+type TableManager struct {
+	mu          sync.RWMutex
+	tables      map[string]*Table                 // roomID → table
+	subs        map[string]map[string]*ws.Session // roomID → userID → session
+	rooms       *room.Manager
+	tokens      tokenVerifier
+	roundsToWin int
+}
+
+// tokenVerifier is the subset of auth.TokenManager we need (kept narrow so
+// tests can stub it).
+type tokenVerifier interface {
+	VerifyAccess(token string) (string, error)
+}
+
+func NewTableManager(rooms *room.Manager, tokens tokenVerifier, roundsToWin int) *TableManager {
+	tm := &TableManager{
+		tables:      make(map[string]*Table),
+		subs:        make(map[string]map[string]*ws.Session),
+		rooms:       rooms,
+		tokens:      tokens,
+		roundsToWin: roundsToWin,
+	}
+	rooms.SetNotifier(tm)
+	return tm
+}
+
+// RoomUpdated fans out lobby snapshots to subscribers (room.Notifier).
+func (tm *TableManager) RoomUpdated(r room.Room) {
+	tm.mu.RLock()
+	subs := tm.subs[r.ID]
+	sessions := make([]*ws.Session, 0, len(subs))
+	for _, s := range subs {
+		sessions = append(sessions, s)
+	}
+	tm.mu.RUnlock()
+	for _, s := range sessions {
+		s.Send(ws.Envelope{Type: ws.MsgRoom, Payload: mustMarshal(r)})
+	}
+}
+
+// Authenticate validates the WS upgrade token.
+func (tm *TableManager) Authenticate(token string) (string, string, error) {
+	uid, err := tm.tokens.VerifyAccess(token)
+	if err != nil {
+		return "", "", fmt.Errorf("unauthorized")
+	}
+	return uid, uid, nil // username resolved client-side; profile endpoint exists
+}
+
+// OnDisconnect removes the session from subscriptions; the match continues
+// (reconnection handling deepens in Phase 14).
+func (tm *TableManager) OnDisconnect(s *ws.Session) {
+	tm.mu.Lock()
+	defer tm.mu.Unlock()
+	for roomID, subs := range tm.subs {
+		if subs[s.UserID] == s {
+			delete(subs, s.UserID)
+			if len(subs) == 0 {
+				delete(tm.subs, roomID)
+			}
+		}
+	}
+	for _, t := range tm.tables {
+		t.mu.Lock()
+		for i := range t.sessions {
+			if t.sessions[i] == s {
+				t.sessions[i] = nil
+			}
+		}
+		t.mu.Unlock()
+	}
+}
+
+// HandleCommand routes an authenticated client command.
+func (tm *TableManager) HandleCommand(s *ws.Session, env ws.Envelope) error {
+	switch env.Type {
+	case ws.CmdSubscribe:
+		var p ws.SubscribePayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return fmt.Errorf("bad payload")
+		}
+		return tm.subscribe(s, p.RoomID)
+	case ws.CmdStartGame:
+		var p ws.StartGamePayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return fmt.Errorf("bad payload")
+		}
+		return tm.startGame(s, p.RoomID)
+	case ws.CmdSelectTrump:
+		var p ws.SelectTrumpPayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return fmt.Errorf("bad payload")
+		}
+		return tm.selectTrump(s, p.RoomID, game.Suit(p.Suit))
+	case ws.CmdPlayCard:
+		var p ws.PlayCardPayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return fmt.Errorf("bad payload")
+		}
+		return tm.playCard(s, p.RoomID, game.Card{Suit: game.Suit(p.Card.Suit), Rank: game.Rank(p.Card.Rank)})
+	default:
+		return fmt.Errorf("unknown command %q", env.Type)
+	}
+}
+
+// subscribe registers a session for a room's updates. Membership is
+// required (server-authoritative; see ADR-0004).
+func (tm *TableManager) subscribe(s *ws.Session, roomID string) error {
+	rm, err := tm.rooms.Get(roomID)
+	if err != nil {
+		return err
+	}
+	if !rm.InSeat(s.UserID) {
+		return ErrNotSubscribed
+	}
+	tm.mu.Lock()
+	if tm.subs[roomID] == nil {
+		tm.subs[roomID] = make(map[string]*ws.Session)
+	}
+	tm.subs[roomID][s.UserID] = s
+	var table *Table
+	if t, ok := tm.tables[roomID]; ok {
+		table = t
+	}
+	tm.mu.Unlock()
+
+	// Lobby snapshot.
+	s.Send(ws.Envelope{Type: ws.MsgRoom, Payload: mustMarshal(rm)})
+	// Live game snapshot if a table exists.
+	if table != nil {
+		table.mu.Lock()
+		defer table.mu.Unlock()
+		tm.sendStateLocked(table, s)
+	}
+	return nil
+}
+
+// startGame validates lobby conditions, builds the engine, and deals.
+func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
+	rm, err := tm.rooms.Get(roomID)
+	if err != nil {
+		return err
+	}
+	if rm.HostID != s.UserID {
+		return room.ErrNotHost
+	}
+	if rm.Status != "lobby" {
+		return room.ErrGameInProgress
+	}
+	if len(rm.Members) != 4 {
+		return ErrNeedFourSeats
+	}
+	for _, m := range rm.Members {
+		if !m.Ready {
+			return ErrNotAllReady
+		}
+	}
+	t := &Table{RoomID: roomID, room: rm}
+	var players [4]game.Player
+	for _, m := range rm.Members {
+		players[m.Seat] = game.Player{ID: m.UserID, Name: m.Username}
+	}
+	g, err := game.NewGame(players, game.Options{RoundsToWin: tm.roundsToWin})
+	if err != nil {
+		return err
+	}
+	t.g = g
+	if _, err := g.StartGame(); err != nil {
+		return err
+	}
+	if _, err := g.SelectHakem(); err != nil {
+		return err
+	}
+	if _, err := g.DealInitialCards(); err != nil {
+		return err
+	}
+	tm.mu.Lock()
+	tm.tables[roomID] = t
+	tm.mu.Unlock()
+	if err := tm.rooms.MarkStarted(roomID); err != nil {
+		return err
+	}
+	// Bind already-subscribed sessions.
+	tm.mu.RLock()
+	subs := tm.subs[roomID]
+	tm.mu.RUnlock()
+	t.mu.Lock()
+	for _, m := range rm.Members {
+		if !m.IsAI {
+			if sess, ok := subs[m.UserID]; ok {
+				t.sessions[m.Seat] = sess
+			}
+		}
+	}
+	tm.broadcastLocked(t)
+	t.mu.Unlock()
+	return nil
+}
+
+// selectTrump validates hakem identity via seat, runs the engine, and
+// completes the deal.
+func (tm *TableManager) selectTrump(s *ws.Session, roomID string, suit game.Suit) error {
+	t, g, seat, err := tm.authenticatedTable(s, roomID)
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if g.Hakem() != seat {
+		return game.ErrNotHakem
+	}
+	if _, err := g.SelectTrump(suit); err != nil {
+		return err
+	}
+	if _, err := g.DealRemainingCards(); err != nil {
+		return err
+	}
+	tm.broadcastLocked(t)
+	return nil
+}
+
+// playCard validates seat identity, plays, and auto-resolves trick/round.
+func (tm *TableManager) playCard(s *ws.Session, roomID string, card game.Card) error {
+	t, g, seat, err := tm.authenticatedTable(s, roomID)
+	if err != nil {
+		return err
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if _, err := g.PlayCard(seat, card); err != nil {
+		return err
+	}
+	if g.Phase() == game.PhaseTrickPlay {
+		// CompleteTrick is server-driven once the trick is full.
+		if view := g.ViewFor(seat); len(view.CurrentTrick) == 4 {
+			if _, err := g.CompleteTrick(); err != nil {
+				slog.Error("table: complete trick", "err", err)
+			}
+		}
+	}
+	// Round/match completion is also server-driven.
+	if g.Phase() == game.PhaseRoundComplete {
+		if _, err := g.CompleteRound(); err != nil {
+			slog.Error("table: complete round", "err", err)
+		}
+	}
+	if g.Phase() == game.PhaseGameComplete {
+		if _, err := g.CompleteGame(); err != nil {
+			slog.Error("table: complete game", "err", err)
+		}
+	}
+	tm.broadcastLocked(t)
+	return nil
+}
+
+// authenticatedTable resolves the table and the caller's seat, enforcing
+// membership (auth, membership; phase/turn/legality live in the engine).
+func (tm *TableManager) authenticatedTable(s *ws.Session, roomID string) (*Table, *game.Game, game.Seat, error) {
+	tm.mu.RLock()
+	t, ok := tm.tables[roomID]
+	tm.mu.RUnlock()
+	if !ok {
+		return nil, nil, 0, ErrTableNotFound
+	}
+	seat, ok := t.roomSeat(s.UserID)
+	if !ok {
+		return nil, nil, 0, room.ErrNotInRoom
+	}
+	return t, t.g, seat, nil
+}
+
+func (t *Table) roomSeat(userID string) (game.Seat, bool) {
+	for _, m := range t.room.Members {
+		if m.UserID == userID {
+			return game.Seat(m.Seat), true
+		}
+	}
+	return 0, false
+}
+
+// sendStateLocked pushes the per-seat view to one session. Caller holds t.mu.
+func (tm *TableManager) sendStateLocked(t *Table, s *ws.Session) {
+	seat, ok := t.roomSeat(s.UserID)
+	if !ok {
+		return
+	}
+	s.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(t.g.ViewFor(seat))})
+}
+
+// broadcastLocked sends per-seat views and public events to all seated
+// sessions. Caller holds t.mu. Only public event kinds cross the wire.
+func (tm *TableManager) broadcastLocked(t *Table) {
+	public := publicEvents(t.g.Events())
+	for seat, sess := range t.sessions {
+		if sess == nil {
+			continue
+		}
+		sess.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(t.g.ViewFor(game.Seat(seat)))})
+		for _, ev := range public {
+			sess.Send(ws.Envelope{Type: ws.MsgEvents, Name: string(ev.Kind), Payload: mustMarshal(ev.Data)})
+		}
+	}
+}
+
+// publicEvents returns events safe for everyone (no private hands).
+func publicEvents(evs []game.Event) []game.Event {
+	out := make([]game.Event, 0, len(evs))
+	for _, ev := range evs {
+		switch ev.Kind {
+		case game.EventHakemSelected, game.EventTrumpSelected, game.EventCardPlayed,
+			game.EventTrickCompleted, game.EventRoundCompleted, game.EventGameCompleted,
+			game.EventNextRoundStarted:
+			out = append(out, ev)
+		}
+	}
+	return out
+}
+
+func mustMarshal(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		slog.Error("app: marshal", "err", err)
+		return nil
+	}
+	return b
+}

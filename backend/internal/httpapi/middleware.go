@@ -1,13 +1,17 @@
 package httpapi
 
 import (
+	"bufio"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"runtime/debug"
 	"time"
 )
 
-// statusRecorder captures the response status for request logging.
+// statusRecorder captures the response status for request logging. It
+// preserves Hijacker/Flusher so WebSocket upgrades work through the chain.
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
@@ -16,6 +20,23 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack delegates to the underlying writer so gorilla/websocket upgrades
+// succeed through the middleware chain.
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("response writer does not support hijacking")
+	}
+	return hj.Hijack()
+}
+
+// Flush delegates for streaming responses.
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // loggingMiddleware logs every request with duration and status.

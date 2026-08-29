@@ -8,6 +8,7 @@ import (
 	"github.com/hokm/platform/internal/app"
 	"github.com/hokm/platform/internal/auth"
 	"github.com/hokm/platform/internal/room"
+	"github.com/hokm/platform/internal/ws"
 )
 
 // Server owns the HTTP mux and its dependencies. Construction is the
@@ -17,12 +18,13 @@ type Server struct {
 	users  *app.UserService
 	tokens *auth.TokenManager
 	rooms  *room.Manager
+	hub    *ws.Hub
 }
 
 // NewServer wires routes. Dependencies are added incrementally per phase;
 // unknown routes return 404 JSON.
-func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Manager) *Server {
-	s := &Server{mux: http.NewServeMux(), users: users, tokens: tokens, rooms: rooms}
+func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Manager, hub *ws.Hub) *Server {
+	s := &Server{mux: http.NewServeMux(), users: users, tokens: tokens, rooms: rooms, hub: hub}
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 
 	// Auth (Phase 4).
@@ -41,6 +43,11 @@ func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Ma
 	s.mux.Handle("POST /api/rooms/{id}/kick", s.RequireAuth(http.HandlerFunc(s.handleKick)))
 	s.mux.Handle("POST /api/rooms/{id}/ai", s.RequireAuth(http.HandlerFunc(s.handleAddAI)))
 	s.mux.Handle("POST /api/rooms/{id}/ai/remove", s.RequireAuth(http.HandlerFunc(s.handleRemoveAI)))
+
+	// WebSocket (Phases 6-7).
+	if hub != nil {
+		s.mux.HandleFunc("GET /api/ws", hub.ServeWS)
+	}
 
 	return s
 }
