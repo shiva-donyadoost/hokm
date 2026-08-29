@@ -11,6 +11,7 @@ import (
 
 	"github.com/hokm/platform/internal/ai"
 	"github.com/hokm/platform/internal/game"
+	"github.com/hokm/platform/internal/rating"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
 )
@@ -39,13 +40,14 @@ type Table struct {
 // TableManager implements ws.CommandHandler and orchestrates matches.
 type TableManager struct {
 	mu          sync.RWMutex
-	tables      map[string]*Table                 // roomID → table
-	subs        map[string]map[string]*ws.Session // roomID → userID → session
+	tables      map[string]*Table                 // roomID â†’ table
+	subs        map[string]map[string]*ws.Session // roomID â†’ userID â†’ session
 	rooms       *room.Manager
 	tokens      tokenVerifier
 	roundsToWin int
 	chat        *ChatService
-	prevMembers map[string]map[string]string // roomID → userID → username
+	scores      rating.ScoreStore            // nil â†’ stats not recorded
+	prevMembers map[string]map[string]string // roomID â†’ userID â†’ username
 }
 
 // tokenVerifier is the subset of auth.TokenManager we need (kept narrow so
@@ -54,7 +56,7 @@ type tokenVerifier interface {
 	VerifyAccess(token string) (string, error)
 }
 
-func NewTableManager(rooms *room.Manager, tokens tokenVerifier, roundsToWin int) *TableManager {
+func NewTableManager(rooms *room.Manager, tokens tokenVerifier, roundsToWin int, scores rating.ScoreStore) *TableManager {
 	tm := &TableManager{
 		tables:      make(map[string]*Table),
 		subs:        make(map[string]map[string]*ws.Session),
@@ -62,6 +64,7 @@ func NewTableManager(rooms *room.Manager, tokens tokenVerifier, roundsToWin int)
 		tokens:      tokens,
 		roundsToWin: roundsToWin,
 		chat:        NewChatService(),
+		scores:      scores,
 		prevMembers: make(map[string]map[string]string),
 	}
 	rooms.SetNotifier(tm)
@@ -316,7 +319,7 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 			}
 		}
 	}
-	t.runAIAndBroadcast()
+	t.runAIAndBroadcast(tm)
 	t.mu.Unlock()
 	return nil
 }
@@ -339,7 +342,7 @@ func (tm *TableManager) selectTrump(s *ws.Session, roomID string, suit game.Suit
 	if _, err := g.DealRemainingCards(); err != nil {
 		return err
 	}
-	t.runAIAndBroadcast()
+	t.runAIAndBroadcast(tm)
 	return nil
 }
 
@@ -354,7 +357,7 @@ func (tm *TableManager) playCard(s *ws.Session, roomID string, card game.Card) e
 	if _, err := g.PlayCard(seat, card); err != nil {
 		return err
 	}
-	t.runAIAndBroadcast()
+	t.runAIAndBroadcast(tm)
 	return nil
 }
 
@@ -394,13 +397,13 @@ func (tm *TableManager) sendStateLocked(t *Table, s *ws.Session) {
 
 // runAIAndBroadcast advances AI seats until a human must act or the match
 // ends, then pushes views + new public events to everyone. Caller holds t.mu.
-func (t *Table) runAIAndBroadcast() {
-	t.aiLoop()
+func (t *Table) runAIAndBroadcast(tm *TableManager) {
+	t.aiLoop(tm)
 	t.broadcast()
 }
 
 // aiLoop applies engine commands for AI seats until a human turn or end.
-func (t *Table) aiLoop() {
+func (t *Table) aiLoop(tm *TableManager) {
 	g := t.g
 	steps := 0
 	for steps < 100000 {
@@ -444,13 +447,46 @@ func (t *Table) aiLoop() {
 				return
 			}
 		case game.PhaseGameComplete:
-			if _, err := g.CompleteGame(); err != nil {
+			evs, err := g.CompleteGame()
+			if err != nil {
 				slog.Error("ai: complete game", "err", err)
 			}
+			tm.recordMatch(t, evs)
 			return
 		default:
 			return
 		}
+	}
+}
+
+// recordMatch persists stats/ratings for a finished match (human seats only).
+func (tm *TableManager) recordMatch(t *Table, evs []game.Event) {
+	if tm.scores == nil || len(evs) == 0 {
+		return
+	}
+	gd, ok := evs[len(evs)-1].Data.(game.GameCompletedData)
+	if !ok || evs[len(evs)-1].Kind != game.EventGameCompleted {
+		return
+	}
+	rec := rating.MatchRecord{
+		GameID:     newID(),
+		RoomID:     t.RoomID,
+		RoundsWonA: gd.RoundsWonA,
+		RoundsWonB: gd.RoundsWonB,
+		WinnerTeam: int(gd.WinnerTeam),
+	}
+	for _, m := range t.room.Members {
+		rec.Players = append(rec.Players, rating.MatchPlayer{
+			UserID:       m.UserID,
+			Username:     m.Username,
+			Seat:         m.Seat,
+			Team:         m.Seat % 2,
+			IsAI:         m.IsAI,
+			AIDifficulty: m.AIDifficulty,
+		})
+	}
+	if err := tm.scores.ApplyMatch(rec); err != nil {
+		slog.Error("record match", "err", err)
 	}
 }
 

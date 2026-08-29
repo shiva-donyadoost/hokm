@@ -17,6 +17,7 @@ import (
 	"github.com/hokm/platform/internal/game"
 	"github.com/hokm/platform/internal/httpapi"
 	"github.com/hokm/platform/internal/infra/memory"
+	"github.com/hokm/platform/internal/rating"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
 )
@@ -26,6 +27,7 @@ import (
 type stack struct {
 	ts     *httptest.Server
 	client *http.Client
+	scores *rating.MemoryStore
 }
 
 func newStack(t *testing.T) *stack {
@@ -33,11 +35,12 @@ func newStack(t *testing.T) *stack {
 	tokens := auth.NewTokenManager("test-secret-value-at-least-long", time.Hour)
 	users := app.NewUserService(memory.NewUserStore(), tokens, auth.NewMemoryRefreshStore(), time.Hour)
 	rooms := room.NewManager()
-	tables := app.NewTableManager(rooms, tokens, 1) // RoundsToWin=1: one round decides
+	scores := rating.NewMemoryStore()
+	tables := app.NewTableManager(rooms, tokens, 1, scores) // RoundsToWin=1: one round decides
 	hub := ws.NewHub(tables)
-	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil).Handler())
+	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil, nil).Handler())
 	t.Cleanup(ts.Close)
-	return &stack{ts: ts, client: ts.Client()}
+	return &stack{ts: ts, client: ts.Client(), scores: scores}
 }
 
 func (s *stack) post(t *testing.T, path, token string, body any) map[string]any {

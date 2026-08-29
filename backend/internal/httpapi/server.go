@@ -8,6 +8,7 @@ import (
 
 	"github.com/hokm/platform/internal/app"
 	"github.com/hokm/platform/internal/auth"
+	"github.com/hokm/platform/internal/rating"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
 )
@@ -26,12 +27,13 @@ type Server struct {
 	rooms   *room.Manager
 	hub     *ws.Hub
 	limiter Limiter
+	scores  rating.ScoreStore
 }
 
 // NewServer wires routes. Dependencies are added incrementally per phase;
 // unknown routes return 404 JSON.
-func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Manager, hub *ws.Hub, limiter Limiter) *Server {
-	s := &Server{mux: http.NewServeMux(), users: users, tokens: tokens, rooms: rooms, hub: hub, limiter: limiter}
+func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Manager, hub *ws.Hub, limiter Limiter, scores rating.ScoreStore) *Server {
+	s := &Server{mux: http.NewServeMux(), users: users, tokens: tokens, rooms: rooms, hub: hub, limiter: limiter, scores: scores}
 	s.mux.HandleFunc("GET /api/health", s.handleHealth)
 
 	// Auth (Phase 4) — rate limited (Phase 11/15).
@@ -51,12 +53,49 @@ func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Ma
 	s.mux.Handle("POST /api/rooms/{id}/ai", s.RequireAuth(http.HandlerFunc(s.handleAddAI)))
 	s.mux.Handle("POST /api/rooms/{id}/ai/remove", s.RequireAuth(http.HandlerFunc(s.handleRemoveAI)))
 
+	// Stats & ranking (Phase 13).
+	s.mux.Handle("GET /api/leaderboard", s.RequireAuth(http.HandlerFunc(s.handleLeaderboard)))
+	s.mux.Handle("GET /api/stats", s.RequireAuth(http.HandlerFunc(s.handleMyStats)))
+
 	// WebSocket (Phases 6-7) — rate limited on the upgrade handshake.
 	if hub != nil {
 		s.mux.Handle("GET /api/ws", s.limit(http.HandlerFunc(hub.ServeWS)))
 	}
 
 	return s
+}
+
+// handleLeaderboard returns the top players by rating.
+func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
+	if s.scores == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}})
+		return
+	}
+	entries, err := s.scores.Leaderboard(50)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
+// handleMyStats returns the caller's statistics entry.
+func (s *Server) handleMyStats(w http.ResponseWriter, r *http.Request) {
+	uid, ok := UserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, r, apiError(http.StatusUnauthorized, "unauthorized", "not authenticated"))
+		return
+	}
+	if s.scores == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"stats": nil})
+		return
+	}
+	entry, err := s.scores.StatsOf(uid)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"stats": entry})
 }
 
 // limit applies the per-IP limiter when configured; fails open otherwise.

@@ -46,5 +46,19 @@ func TestHumanWithThreeAIsCompletesGame(t *testing.T) {
 	if st.LastTrick == nil || st.LastTrick.Number != 13 {
 		t.Fatalf("last trick = %+v, want #13", st.LastTrick)
 	}
-	t.Logf("human vs AI complete: roundsA=%v roundsB=%v", st.RoundsWon[0], st.RoundsWon[1])
+
+	// The human's stats must have been recorded (AI seats are never scored).
+	lb, err := s.scores.Leaderboard(10)
+	if err != nil {
+		t.Fatalf("leaderboard: %v", err)
+	}
+	if len(lb) != 1 {
+		t.Fatalf("leaderboard entries = %d, want 1 (human only)", len(lb))
+	}
+	e := lb[0]
+	if e.GamesPlayed != 1 || (e.Wins+e.Losses) != 1 || e.Rating == 1000 {
+		t.Fatalf("stats not updated: %+v", e)
+	}
+	t.Logf("stats recorded: games=%d wins=%d losses=%d rating=%d",
+		e.GamesPlayed, e.Wins, e.Losses, e.Rating)
 }

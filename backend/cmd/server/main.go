@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/hokm/platform/internal/app"
 	"github.com/hokm/platform/internal/auth"
 	"github.com/hokm/platform/internal/config"
@@ -19,6 +21,7 @@ import (
 	"github.com/hokm/platform/internal/infra/memory"
 	"github.com/hokm/platform/internal/infra/postgres"
 	"github.com/hokm/platform/internal/infra/redisx"
+	"github.com/hokm/platform/internal/rating"
 	"github.com/hokm/platform/internal/room"
 	"github.com/hokm/platform/internal/ws"
 )
@@ -37,9 +40,11 @@ func main() {
 	// to memory-only with a warning.
 	var userRepo app.UserRepo = memory.NewUserStore()
 	var refreshStore auth.RefreshStore = auth.NewMemoryRefreshStore()
-	if pool, err := postgres.Connect(ctx, cfg.Postgres.DSN()); err != nil {
+	var pool *pgxpool.Pool
+	if p, err := postgres.Connect(ctx, cfg.Postgres.DSN()); err != nil {
 		slog.Warn("postgres unavailable, using in-memory stores", "err", err)
 	} else {
+		pool = p
 		defer pool.Close()
 		slog.Info("postgres connected, migrations applied")
 		userRepo = postgres.NewUserStore(pool)
@@ -54,15 +59,20 @@ func main() {
 		limiter = redisx.NewRateLimiter(rdb, time.Minute, 60)
 	}
 
+	var scores rating.ScoreStore = rating.NewMemoryStore()
+	if pool != nil {
+		scores = postgres.NewScoreStore(pool)
+	}
+
 	tokens := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTTL)
 	users := app.NewUserService(userRepo, tokens, refreshStore, cfg.RefreshTTL)
 	rooms := room.NewManager()
-	tables := app.NewTableManager(rooms, tokens, cfg.RoundsToWin)
+	tables := app.NewTableManager(rooms, tokens, cfg.RoundsToWin, scores)
 	hub := ws.NewHub(tables)
 
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.NewServer(users, tokens, rooms, hub, limiter).Handler(),
+		Handler:           httpapi.NewServer(users, tokens, rooms, hub, limiter, scores).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
