@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 336" width="240" height="336">
+  <defs>
+    <pattern id="hkm-back" width="24" height="24" patternUnits="userSpaceOnUse">
+      <rect width="24" height="24" fill="#134e4a"/>
+      <path d="M12 2 L22 12 L12 22 L2 12 Z" fill="none" stroke="#5eead4" stroke-width="1.2"/>
+      <circle cx="12" cy="12" r="3" fill="#0f172a"/>
+    </pattern>
+  </defs>
+  <rect x="2" y="2" width="236" height="332" rx="12" fill="#0f172a" stroke="#94a3b8" stroke-width="2"/>
+  <rect x="12" y="12" width="216" height="312" rx="8" fill="url(#hkm-back)"/>
+  <rect x="12" y="12" width="216" height="312" rx="8" fill="none" stroke="#5eead4" stroke-width="1.5"/>
+</svg>

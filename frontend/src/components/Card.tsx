@@ -1,44 +1,62 @@
-import { isRed, rankLabel, SUIT_SYMBOL, type Card as CardT } from '../protocol/messages'
+import type { CSSProperties } from 'react'
+import { cardFaceAsset, CARD_BACK_ASSET } from '../assets/cardAssets'
+import { rankLabel, type Card as CardT } from '../protocol/messages'
 
 interface CardProps {
   card: CardT
   size?: 'sm' | 'md' | 'lg'
   disabled?: boolean
+  selected?: boolean
   onClick?: () => void
+  style?: CSSProperties
+  className?: string
 }
 
 const SIZES = {
-  sm: 'w-9 h-13 text-xs rounded-md',
-  md: 'w-12 h-18 text-base rounded-lg',
-  lg: 'w-14 h-20 text-lg rounded-lg',
+  sm: { w: 36, h: 50 },
+  md: { w: 52, h: 73 },
+  lg: { w: 66, h: 92 },
 }
 
-// Card renders a single playing card with CSS only (no images).
-export function Card({ card, size = 'md', disabled, onClick }: CardProps) {
-  const red = isRed(card.suit)
+// Card renders the SVG asset for a face-up card. Face data (rank/suit text)
+// is kept in aria-labels for accessibility (§48) — the SVG is the artwork.
+export function Card({ card, size = 'md', disabled, selected, onClick, style, className }: CardProps) {
+  const dim = SIZES[size]
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`select-none ${SIZES[size]} bg-white shadow-md border border-slate-300
-        flex flex-col items-center justify-center font-bold
-        ${red ? 'text-rose-600' : 'text-slate-900'}
-        ${disabled ? 'opacity-40' : 'active:scale-95 transition-transform cursor-pointer'}`}
+      style={{ width: dim.w, height: dim.h, ...style }}
+      className={`select-none p-0 bg-transparent border-0 cursor-pointer
+        ${disabled ? 'opacity-40' : ''}
+        ${selected ? 'ring-2 ring-amber-300 rounded-lg' : ''}
+        ${className ?? ''}`}
       aria-label={rankLabel(card.rank) + ' of ' + card.suit}
     >
-      <span className="leading-none">{rankLabel(card.rank)}</span>
-      <span className="leading-none text-lg">{SUIT_SYMBOL[card.suit]}</span>
+      <img
+        src={cardFaceAsset(card)}
+        alt=""
+        draggable={false}
+        width={dim.w}
+        height={dim.h}
+        style={{ display: 'block', borderRadius: 6 }}
+      />
     </button>
   )
 }
 
-// CardBack renders the face-down card.
-export function CardBack({ size = 'sm' }: { size?: 'sm' | 'md' | 'lg' }) {
+// CardBack renders the hidden-card asset (§7, §35).
+export function CardBack({ size = 'sm', style }: { size?: 'sm' | 'md' | 'lg'; style?: CSSProperties }) {
+  const dim = SIZES[size]
   return (
-    <div
-      className={`${SIZES[size]} bg-teal-800 border border-teal-600 rounded-lg shadow`}
-      aria-hidden
+    <img
+      src={CARD_BACK_ASSET}
+      alt="hidden card"
+      draggable={false}
+      width={dim.w}
+      height={dim.h}
+      style={{ display: 'block', borderRadius: 6, ...style }}
     />
   )
 }

@@ -119,8 +119,14 @@ export const api = {
     }),
   me: () => request<{ user: User }>('GET', '/me'),
   listRooms: () => request<{ rooms: Room[] }>('GET', '/rooms'),
-  createRoom: (name: string, visibility: string) =>
-    request<{ room: Room }>('POST', '/rooms', { name, visibility }),
+  createRoom: (name: string, visibility: string, roundCount: number, gameSpeed: string, chatEnabled: boolean) =>
+    request<{ room: Room }>('POST', '/rooms', {
+      name,
+      visibility,
+      round_count: roundCount,
+      game_speed: gameSpeed,
+      chat_enabled: chatEnabled,
+    }),
   joinRoom: (code: string) =>
     request<{ room: Room }>('POST', '/rooms/join', { code }),
   getRoom: (id: string) => request<{ room: Room }>('GET', `/rooms/${id}`),

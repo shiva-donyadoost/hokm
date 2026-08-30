@@ -21,6 +21,11 @@ export interface CompletedTrick {
   winner_team: number
 }
 
+export interface RoundResult {
+  number: number
+  winner_team: number
+}
+
 export interface SeatView {
   phase: string
   round_number: number
@@ -34,6 +39,9 @@ export interface SeatView {
   last_trick?: CompletedTrick | null
   tricks_this_round: [number, number]
   rounds_won: [number, number]
+  round_history?: RoundResult[]
+  deadline_unix_ms?: number
+  deadline_kind?: string
   match_over: boolean
 }
 
@@ -56,6 +64,9 @@ export interface Room {
   members: RoomMember[]
   status: string
   created_at: string
+  round_count: number
+  game_speed: string
+  chat_enabled: boolean
 }
 
 // --- envelopes ---

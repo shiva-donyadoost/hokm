@@ -52,6 +52,7 @@ export const useGame = create<GameState>((set, get) => ({
 
     ws.onopen = () => {
       set({ connected: true, room: null, view: null, chat: [], lastError: null })
+      localStorage.setItem('hokm.lastRoom', roomId)
       ws.send(JSON.stringify({ type: Cmd.Subscribe, id: nextId(), payload: { room_id: roomId } } satisfies Envelope))
     }
     ws.onmessage = (e) => {
@@ -91,7 +92,8 @@ export const useGame = create<GameState>((set, get) => ({
       ws.onclose = null
       ws.close()
     }
-    set({ ws: null, connected: false, room: null, view: null, lastError: null })
+    set({ ws: null, connected: false, room: null, view: null, chat: [], lastError: null })
+    localStorage.removeItem('hokm.lastRoom')
   },
 
   startGame: () => {

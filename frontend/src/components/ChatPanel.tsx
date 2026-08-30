@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGame } from '../state/game'
+import { GAME } from '../config'
 
-// ChatPanel renders room chat: history + live messages + input.
+// ChatPanel renders room chat: history + live messages + input with an
+// inline emoji picker (§32). The picker is game-scoped and lightweight so
+// it stays inside the viewport on mobile (§50).
 export function ChatPanel({ compact = false }: { compact?: boolean }) {
   const chat = useGame((s) => s.chat)
   const sendChat = useGame((s) => s.sendChat)
   const [body, setBody] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -30,14 +34,36 @@ export function ChatPanel({ compact = false }: { compact?: boolean }) {
                 m.body
               ) : (
                 <>
-                  <span className="font-semibold text-teal-300">{m.username}:</span>{' '}
-                  {m.body}
+                  <span className="font-semibold text-teal-300">{m.username}:</span> {m.body}
                 </>
               )}
             </p>
           ))
         )}
       </div>
+      {pickerOpen ? (
+        <div
+          className="flex flex-wrap gap-1 p-2 border-t border-slate-800 bg-slate-800/60"
+          role="listbox"
+          aria-label="emoji picker"
+        >
+          {GAME.chatEmojis.map((e) => (
+            <button
+              key={e}
+              type="button"
+              role="option"
+              aria-selected={false}
+              className="text-xl p-1 rounded hover:bg-slate-700 active:scale-90"
+              onClick={() => {
+                setBody((b) => b + e)
+                setPickerOpen(false)
+              }}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <form
         className="flex gap-1 p-2 border-t border-slate-800"
         onSubmit={(e) => {
@@ -46,8 +72,17 @@ export function ChatPanel({ compact = false }: { compact?: boolean }) {
           if (!b) return
           sendChat(b)
           setBody('')
+          setPickerOpen(false)
         }}
       >
+        <button
+          type="button"
+          className="px-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-lg"
+          aria-label="open emoji picker"
+          onClick={() => setPickerOpen((v) => !v)}
+        >
+          😊
+        </button>
         <input
           className="input !py-1 text-xs"
           placeholder="message…"

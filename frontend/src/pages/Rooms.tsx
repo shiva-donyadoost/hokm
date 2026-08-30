@@ -10,8 +10,12 @@ export function Rooms() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [name, setName] = useState('')
   const [visibility, setVisibility] = useState('public')
+  const [roundCount, setRoundCount] = useState(1)
+  const [gameSpeed, setGameSpeed] = useState('medium')
+  const [chatEnabled, setChatEnabled] = useState(true)
   const [joinCode, setJoinCode] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const lastRoom = localStorage.getItem('hokm.lastRoom')
 
   useEffect(() => {
     let live = true
@@ -35,6 +39,16 @@ export function Rooms() {
     <div className="min-h-dvh bg-slate-950 p-4 max-w-lg mx-auto">
       <Header title="Rooms" />
 
+      {/* Return-to-game banner: refresh persistence (impliment.md §25) */}
+      {lastRoom ? (
+        <div className="card mb-4 flex items-center justify-between !py-3">
+          <span className="text-sm text-slate-300">You have an active table.</span>
+          <button className="btn-primary" onClick={() => navigate(`/room/${lastRoom}`)}>
+            Return to game
+          </button>
+        </div>
+      ) : null}
+
       {/* Create room */}
       <section className="card mb-4">
         <h2 className="font-bold mb-2">Create a room</h2>
@@ -50,24 +64,57 @@ export function Rooms() {
               className="input flex-1"
               value={visibility}
               onChange={(e) => setVisibility(e.target.value)}
+              aria-label="visibility"
             >
               <option value="public">Public</option>
               <option value="private">Private (code only)</option>
             </select>
-            <button
-              className="btn-primary"
-              onClick={async () => {
-                try {
-                  const res = await api.createRoom(name, visibility)
-                  navigate(`/room/${res.room.id}`)
-                } catch (e) {
-                  setError(e instanceof Error ? e.message : 'failed')
-                }
-              }}
+            <select
+              className="input flex-1"
+              value={roundCount}
+              onChange={(e) => setRoundCount(Number(e.target.value))}
+              aria-label="rounds to win"
             >
-              Create
-            </button>
+              {[1, 3, 5].map((n) => (
+                <option key={n} value={n}>
+                  {n} round{n > 1 ? 's' : ''} to win
+                </option>
+              ))}
+            </select>
           </div>
+          <div className="flex gap-2">
+            <select
+              className="input flex-1"
+              value={gameSpeed}
+              onChange={(e) => setGameSpeed(e.target.value)}
+              aria-label="game speed"
+            >
+              <option value="fast">Fast (5s)</option>
+              <option value="medium">Medium (10s)</option>
+              <option value="slow">Slow (15s)</option>
+            </select>
+            <label className="input flex items-center gap-2 flex-1 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={chatEnabled}
+                onChange={(e) => setChatEnabled(e.target.checked)}
+              />
+              chat
+            </label>
+          </div>
+          <button
+            className="btn-primary"
+            onClick={async () => {
+              try {
+                const res = await api.createRoom(name, visibility, roundCount, gameSpeed, chatEnabled)
+                navigate(`/room/${res.room.id}`)
+              } catch (e) {
+                setError(e instanceof Error ? e.message : 'failed')
+              }
+            }}
+          >
+            Create
+          </button>
         </div>
       </section>
 
