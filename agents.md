@@ -127,6 +127,18 @@ below. 7. Commit the fix.
    (`base` for dev, `prod` with baked frontend), and make launcher scripts
    abort on failed builds instead of serving stale containers.
 
+### Frontend encoding (2026-08-30)
+
+9. **PowerShell `Get-Content` corrupts BOM-less UTF-8 source files**: PS 5.1
+   reads BOM-less files with the ANSI codepage, so editing frontend sources
+   through `Get-Content`/`Set-Content` or `WriteAllText` after such a read
+   double-encodes every multibyte character (middle dots, suit symbols,
+   emojis) into visible mojibake in the UI. Symptom: garbled text on screen
+   while the dev server happily serves it. Fix: rewrite the affected files
+   as pure ASCII with the write/edit tools; verify with a non-ASCII byte
+   scan of `src/` AND of the served bundle before committing. Rule: never
+   edit BOM-less UTF-8 sources through PS 5.1 string pipelines.
+
 ### Engine (2026-08-29)
 
 6. **Lead-suit must be captured on the first card of a trick**: the initial
