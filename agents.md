@@ -112,6 +112,21 @@ below. 7. Commit the fix.
    diffing the served module (`curl /src/<file>`) against disk, not by
    trusting the browser.
 
+### Dev tooling (2026-08-30)
+
+7. **PowerShell `$args` is a reserved automatic variable**: declaring
+   `function F($args)` and splatting an array (`F @("up","-d")`) binds only
+   the first element — the rest land in the automatic variable. Symptom:
+   `docker compose` printed its usage help. Fix: named parameter with array
+   type (`param([string[]]$ComposeArgs)` + `docker compose @ComposeArgs`).
+8. **Compose build contexts must match the Dockerfile's COPY paths**: the
+   prod Dockerfile (repo-root context, `COPY backend/...`) silently broke
+   the dev compose build (`build: ./backend` → backend-relative context).
+   A running container from the previous image masked the failure until the
+   next rebuild. Unify on repo-root context + a `target:` stage selector
+   (`base` for dev, `prod` with baked frontend), and make launcher scripts
+   abort on failed builds instead of serving stale containers.
+
 ### Engine (2026-08-29)
 
 6. **Lead-suit must be captured on the first card of a trick**: the initial
