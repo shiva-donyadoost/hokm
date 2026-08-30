@@ -28,6 +28,8 @@ func newTimedStack(t *testing.T, chatEnabled bool) *stack {
 	gameCfg := config.DefaultGameConfig()
 	gameCfg.HakemSelectionTimeout = 300 * time.Millisecond
 	gameCfg.CardSelectionTimeouts.Medium = 300 * time.Millisecond
+	gameCfg.AIMoveDelay = 30 * time.Millisecond
+	gameCfg.TrickPause = 60 * time.Millisecond
 	tables := app.NewTableManager(rooms, tokens, scores, gameCfg)
 	hub := ws.NewHub(tables)
 	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil, scores).Handler())

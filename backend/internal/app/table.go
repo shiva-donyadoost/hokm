@@ -41,9 +41,9 @@ type Table struct {
 	rng          *rand.Rand
 	sentEvents   int // events already broadcast
 
-	// Server-authoritative timing (impliment.md §12, §41): one timer per
+	// Server-authoritative timing (impliment.md Â§12, Â§41): one timer per
 	// table, recomputed on every state change; a generation counter makes
-	// stale timer fires harmless (§42).
+	// stale timer fires harmless (Â§42).
 	speed          string // fast | medium | slow (room setting)
 	timer          *time.Timer
 	timerGen       int
@@ -52,19 +52,27 @@ type Table struct {
 	hakemTimeout   time.Duration // from GameConfig
 	cardTimeout    time.Duration // per speed, from GameConfig
 	tm             *TableManager // back-reference for timer callbacks
+
+	// Presentation pacing (impliment.md Â§13, Â§39): automatic steps (AI
+	// moves, trick completion) are scheduled with delays so the table stays
+	// visually readable. Separate from the deadline timer above.
+	aiMoveDelay time.Duration
+	trickPause  time.Duration
+	stepTimer   *time.Timer
+	stepGen     int
 }
 
 // TableManager implements ws.CommandHandler and orchestrates matches.
 type TableManager struct {
 	mu          sync.RWMutex
-	tables      map[string]*Table                 // roomID → table
-	subs        map[string]map[string]*ws.Session // roomID → userID → session
+	tables      map[string]*Table                 // roomID â†’ table
+	subs        map[string]map[string]*ws.Session // roomID â†’ userID â†’ session
 	rooms       *room.Manager
 	tokens      tokenVerifier
 	gameCfg     config.GameConfig
 	chat        *ChatService
-	scores      rating.ScoreStore            // nil → stats not recorded
-	prevMembers map[string]map[string]string // roomID → userID → username
+	scores      rating.ScoreStore            // nil â†’ stats not recorded
+	prevMembers map[string]map[string]string // roomID â†’ userID â†’ username
 }
 
 // tokenVerifier is the subset of auth.TokenManager we need (kept narrow so
@@ -73,9 +81,9 @@ type tokenVerifier interface {
 	VerifyAccess(token string) (string, error)
 }
 
-// NewTableManager builds the manager from the centralized GameConfig —
+// NewTableManager builds the manager from the centralized GameConfig â€”
 // hakem/card timeouts, reconnect grace, round counts all come from config
-// (impliment.md §1, §A).
+// (impliment.md Â§1, Â§A).
 func NewTableManager(rooms *room.Manager, tokens tokenVerifier, scores rating.ScoreStore, cfg config.GameConfig) *TableManager {
 	tm := &TableManager{
 		tables:      make(map[string]*Table),
@@ -176,8 +184,8 @@ func (tm *TableManager) OnDisconnect(s *ws.Session) {
 		for i := range t.sessions {
 			if t.sessions[i] == s {
 				t.sessions[i] = nil
-				// Grace period starts (impliment.md §28); AI takeover when
-				// it expires (§29).
+				// Grace period starts (impliment.md Â§28); AI takeover when
+				// it expires (Â§29).
 				if m, ok := t.memberAt(game.Seat(i)); ok && !m.IsAI && t.g != nil {
 					seat := game.Seat(i)
 					t.disconnected[seat] = time.Now().Add(tm.gameCfg.ReconnectGracePeriod)
@@ -227,7 +235,7 @@ func (tm *TableManager) HandleCommand(s *ws.Session, env ws.Envelope) error {
 	}
 }
 
-// sendChat validates membership + the room's chat setting (§31), appends to
+// sendChat validates membership + the room's chat setting (Â§31), appends to
 // history, and broadcasts.
 func (tm *TableManager) sendChat(s *ws.Session, roomID, body string) error {
 	rm, err := tm.rooms.Get(roomID)
@@ -275,7 +283,7 @@ func (tm *TableManager) subscribe(s *ws.Session, roomID string) error {
 	// Lobby snapshot.
 	s.Send(ws.Envelope{Type: ws.MsgRoom, Payload: mustMarshal(rm)})
 	// Chat history so the client renders the recent conversation (only when
-	// chat is enabled for this room, §31).
+	// chat is enabled for this room, Â§31).
 	if rm.ChatEnabled {
 		for _, msg := range tm.chat.History(roomID, 50) {
 			s.Send(ws.Envelope{Type: ws.MsgChat, Payload: mustMarshal(msg)})
@@ -331,6 +339,8 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 	t.tm = tm
 	t.hakemTimeout = tm.gameCfg.HakemSelectionTimeout
 	t.cardTimeout = tm.gameCfg.CardTimeout(t.speed)
+	t.aiMoveDelay = tm.gameCfg.AIMoveDelay
+	t.trickPause = tm.gameCfg.TrickPause
 	for _, m := range rm.Members {
 		if m.IsAI {
 			t.ai[m.Seat] = ai.New(m.AIDifficulty, t.rng)
@@ -366,7 +376,7 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 			}
 		}
 	}
-	t.runAIAndBroadcast(tm)
+	t.broadcast(tm)
 	t.mu.Unlock()
 	return nil
 }
@@ -389,7 +399,7 @@ func (tm *TableManager) selectTrump(s *ws.Session, roomID string, suit game.Suit
 	if _, err := g.DealRemainingCards(); err != nil {
 		return err
 	}
-	t.runAIAndBroadcast(tm)
+	t.broadcast(tm)
 	return nil
 }
 
@@ -404,7 +414,7 @@ func (tm *TableManager) playCard(s *ws.Session, roomID string, card game.Card) e
 	if _, err := g.PlayCard(seat, card); err != nil {
 		return err
 	}
-	t.runAIAndBroadcast(tm)
+	t.broadcast(tm)
 	return nil
 }
 
@@ -452,102 +462,33 @@ func (tm *TableManager) sendStateLocked(t *Table, s *ws.Session) {
 	s.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(t.g.ViewFor(seat))})
 }
 
-// runAIAndBroadcast advances AI seats until a human must act or the match
-// ends, then pushes views + new public events to everyone. Caller holds t.mu.
-func (t *Table) runAIAndBroadcast(tm *TableManager) {
-	t.aiLoop(tm)
-	t.broadcast()
-}
-
-// aiLoop applies engine commands for AI seats until a human turn or end.
-func (t *Table) aiLoop(tm *TableManager) {
-	g := t.g
-	steps := 0
-	for steps < 100000 {
-		steps++
-		switch g.Phase() {
-		case game.PhaseHakemSelection:
-			// Subsequent rounds: hakem already set by rotation; this is a
-			// no-op then deals (first round: confirms the ace-draw hakem).
-			if _, err := g.SelectHakem(); err != nil {
-				slog.Error("ai: select hakem", "err", err)
-				return
-			}
-			if _, err := g.DealInitialCards(); err != nil {
-				slog.Error("ai: deal initial", "err", err)
-				return
-			}
-		case game.PhaseTrumpSelection:
-			seat := g.Hakem()
-			if t.ai[seat] == nil {
-				// Human hakem Ã¢â‚¬â€ take over only if the grace period expired.
-				if !t.takeoverDue(seat) {
-					return
-				}
-				is := ai.BuildInformationSet(g.ViewFor(seat), publicEvents(g.Events()))
-				if _, err := g.SelectTrump(t.fallback.DecideTrump(is)); err != nil {
-					slog.Error("takeover: select trump", "err", err)
-					return
-				}
-				if _, err := g.DealRemainingCards(); err != nil {
-					slog.Error("takeover: deal remaining", "err", err)
-					return
-				}
-				continue
-			}
-			is := ai.BuildInformationSet(g.ViewFor(seat), publicEvents(g.Events()))
-			start := time.Now()
-			suit := t.ai[seat].DecideTrump(is)
-			metrics.ObserveAIDecision(time.Since(start).Nanoseconds())
-			if _, err := g.SelectTrump(suit); err != nil {
-				slog.Error("ai: select trump", "err", err)
-				return
-			}
-			if _, err := g.DealRemainingCards(); err != nil {
-				slog.Error("ai: deal remaining", "err", err)
-				return
-			}
-		case game.PhaseTrickPlay:
-			turn := g.ViewFor(game.Seat0).Turn
-			if turn == game.NoSeat {
-				if _, err := g.CompleteTrick(); err != nil {
-					slog.Error("ai: complete trick", "err", err)
-					return
-				}
-				continue
-			}
-			strat := t.ai[turn]
-			if strat == nil {
-				// Human turn Ã¢â‚¬â€ take over only if the grace period expired.
-				if !t.takeoverDue(turn) {
-					return // human must act
-				}
-				strat = t.fallback
-			}
-			is := ai.BuildInformationSet(g.ViewFor(turn), publicEvents(g.Events()))
-			start := time.Now()
-			card := strat.DecideCard(is)
-			metrics.ObserveAIDecision(time.Since(start).Nanoseconds())
-			if _, err := g.PlayCard(turn, card); err != nil {
-				slog.Error("ai: play card", "err", err, "card", card)
-				return
-			}
-		case game.PhaseRoundComplete:
-			if _, err := g.CompleteRound(); err != nil {
-				slog.Error("ai: complete round", "err", err)
-				return
-			}
-		case game.PhaseGameComplete:
-			evs, err := g.CompleteGame()
-			if err != nil {
-				slog.Error("ai: complete game", "err", err)
-			}
-			tm.recordMatch(t, evs)
-			return
-		default:
-			return
+// broadcast sends per-seat views and *new* public events to all seated
+// sessions, then re-arms the authoritative deadline and the next paced
+// automatic step. Caller holds t.mu.
+func (t *Table) broadcast(tm *TableManager) {
+	evs := t.g.Events()
+	fresh := evs
+	if t.sentEvents < len(evs) {
+		fresh = evs[t.sentEvents:]
+	} else {
+		fresh = nil
+	}
+	t.sentEvents = len(evs)
+	public := publicEvents(fresh)
+	for seat, sess := range t.sessions {
+		if sess == nil {
+			continue
+		}
+		v := t.g.ViewFor(game.Seat(seat))
+		v.DeadlineUnixMs = t.deadlineUnixMs
+		v.DeadlineKind = t.deadlineKind
+		sess.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(v)})
+		for _, ev := range public {
+			sess.Send(ws.Envelope{Type: ws.MsgEvents, Name: string(ev.Kind), Payload: mustMarshal(ev.Data)})
 		}
 	}
+	t.rescheduleTimerLocked()
+	t.scheduleNextLocked()
 }
 
 // takeoverDue reports whether the seat's disconnect grace has expired and
@@ -594,34 +535,6 @@ func (tm *TableManager) recordMatch(t *Table, evs []game.Event) {
 	}
 	metrics.GamesDelta(-1)
 	metrics.MatchesInc()
-}
-
-// broadcast sends per-seat views and *new* public events to all seated
-// sessions, then recomputes the authoritative deadline. Caller holds t.mu.
-// Only public event kinds cross the wire.
-func (t *Table) broadcast() {
-	evs := t.g.Events()
-	fresh := evs
-	if t.sentEvents < len(evs) {
-		fresh = evs[t.sentEvents:]
-	} else {
-		fresh = nil
-	}
-	t.sentEvents = len(evs)
-	public := publicEvents(fresh)
-	for seat, sess := range t.sessions {
-		if sess == nil {
-			continue
-		}
-		v := t.g.ViewFor(game.Seat(seat))
-		v.DeadlineUnixMs = t.deadlineUnixMs
-		v.DeadlineKind = t.deadlineKind
-		sess.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(v)})
-		for _, ev := range public {
-			sess.Send(ws.Envelope{Type: ws.MsgEvents, Name: string(ev.Kind), Payload: mustMarshal(ev.Data)})
-		}
-	}
-	t.rescheduleTimerLocked()
 }
 
 // publicEvents returns events safe for everyone (no private hands).

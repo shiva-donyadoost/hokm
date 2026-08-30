@@ -39,6 +39,8 @@ func newStack(t *testing.T) *stack {
 	rooms := room.NewManager()
 	scores := rating.NewMemoryStore()
 	gameCfg := config.DefaultGameConfig()
+	gameCfg.AIMoveDelay = 30 * time.Millisecond
+	gameCfg.TrickPause = 60 * time.Millisecond
 	tables := app.NewTableManager(rooms, tokens, scores, gameCfg) // RoundsToWin=1: one round decides
 	hub := ws.NewHub(tables)
 	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil, nil).Handler())

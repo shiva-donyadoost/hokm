@@ -10,12 +10,12 @@ import (
 	"time"
 )
 
-// GameConfig centralizes every gameplay timing/limit (impliment.md §1).
-// Gameplay logic reads these — never numeric literals. Defaults live here
+// GameConfig centralizes every gameplay timing/limit (impliment.md Â§1).
+// Gameplay logic reads these â€” never numeric literals. Defaults live here
 // only; all are overridable via environment.
 type GameConfig struct {
 	// HakemSelectionTimeout: trump must be chosen within this window
-	// (default 10s); expiry → deterministic automatic trump.
+	// (default 10s); expiry â†’ deterministic automatic trump.
 	HakemSelectionTimeout time.Duration
 	// CardSelectionTimeouts per game speed (fast 5s, medium 10s, slow 15s).
 	CardSelectionTimeouts GameSpeedTimeouts
@@ -24,6 +24,12 @@ type GameConfig struct {
 	// Presentation-only values (never coupled to gameplay timeouts):
 	TrickWinnerDisplayDuration time.Duration // default 3s
 	CardPlayAnimationDuration  time.Duration // default 0.5s
+	// AIMoveDelay paces automatic plays so the table stays readable
+	// (default 1s between AI/automatic card plays).
+	AIMoveDelay time.Duration
+	// TrickPause keeps a completed trick on the table before the next one
+	// begins (default 1s) - winner reveal + collection window.
+	TrickPause time.Duration
 	// AllowedRoundCounts for room creation (default 1, 3, 5).
 	AllowedRoundCounts []int
 }
@@ -57,6 +63,8 @@ func DefaultGameConfig() GameConfig {
 		ReconnectGracePeriod:       30 * time.Second,
 		TrickWinnerDisplayDuration: 3 * time.Second,
 		CardPlayAnimationDuration:  500 * time.Millisecond,
+		AIMoveDelay:                1 * time.Second,
+		TrickPause:                 1 * time.Second,
 		AllowedRoundCounts:         []int{1, 3, 5},
 	}
 }
@@ -72,6 +80,8 @@ func loadGameConfig() GameConfig {
 	g.ReconnectGracePeriod = getDur("GAME_RECONNECT_GRACE_PERIOD", g.ReconnectGracePeriod)
 	g.TrickWinnerDisplayDuration = getDur("GAME_TRICK_WINNER_DISPLAY_DURATION", g.TrickWinnerDisplayDuration)
 	g.CardPlayAnimationDuration = getDur("GAME_CARD_PLAY_ANIMATION_DURATION", g.CardPlayAnimationDuration)
+	g.AIMoveDelay = getDur("GAME_AI_MOVE_DELAY", g.AIMoveDelay)
+	g.TrickPause = getDur("GAME_TRICK_PAUSE", g.TrickPause)
 	if counts := getIntList("GAME_ALLOWED_ROUND_COUNTS", nil); counts != nil {
 		g.AllowedRoundCounts = counts
 	}

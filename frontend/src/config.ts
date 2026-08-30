@@ -7,10 +7,12 @@
 export const ANIM = {
   /** Card movement duration when a played card appears in the trick (§13). */
   cardPlayMs: 500,
-  /** Winner reveal: how long the winning card set stays highlighted (§14). */
-  trickWinnerMs: 3000,
-  /** Cards flying toward the winner after the reveal (§15). */
-  cardCollectionMs: 700,
+  /** Winner highlight before collection starts (§14). Reveal + collect
+   * together match the server's 1s TrickPause so the next trick begins
+   * exactly as the collection lands. */
+  trickWinnerMs: 400,
+  /** Cards flying toward the winner after the highlight (§15). */
+  cardCollectionMs: 600,
   /** Per-card delay during the dealing animation (§6). */
   dealStaggerMs: 60,
   /** Cancelled drag snap-back duration (§23). */

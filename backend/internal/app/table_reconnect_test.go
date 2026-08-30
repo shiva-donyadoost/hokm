@@ -25,6 +25,8 @@ func newTimeoutStack(t *testing.T) *stack {
 	scores := rating.NewMemoryStore()
 	gameCfg := config.DefaultGameConfig()
 	gameCfg.ReconnectGracePeriod = 300 * time.Millisecond
+	gameCfg.AIMoveDelay = 30 * time.Millisecond
+	gameCfg.TrickPause = 60 * time.Millisecond
 	tables := app.NewTableManager(rooms, tokens, scores, gameCfg)
 	hub := ws.NewHub(tables)
 	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil, scores).Handler())
