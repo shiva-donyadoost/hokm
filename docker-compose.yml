@@ -29,7 +29,11 @@ services:
       retries: 10
 
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      # dev target: Go binary only, no frontend bake (fast rebuilds)
+      target: base
     environment:
       APP_ENV: development
       APP_ADDR: ":8080"

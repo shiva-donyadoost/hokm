@@ -38,6 +38,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: prod
     environment:
       APP_ENV: production
       APP_ADDR: ":8080"
