@@ -70,6 +70,7 @@ type Game struct {
 	tricksA, tricksB int
 	roundNumber      int
 	roundsA, roundsB int
+	roundHistory     []RoundResult
 
 	gameCompleted bool
 	eventLog      []Event
@@ -222,12 +223,18 @@ func (g *Game) DealInitialCards() ([]Event, error) {
 // SelectTrump lets the hakem choose the trump suit before the remaining
 // cards are dealt.
 func (g *Game) SelectTrump(suit Suit) ([]Event, error) {
+	return g.SelectTrumpFor(g.hakem, suit, false)
+}
+
+// SelectTrumpFor is SelectTrump with an explicit actor and automatic flag;
+// the timeout policy uses automatic=true.
+func (g *Game) SelectTrumpFor(seat Seat, suit Suit, automatic bool) ([]Event, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.phase != PhaseTrumpSelection {
 		return nil, ErrWrongPhase
 	}
-	if len(g.hands[g.hakem]) == 0 || g.trumpSet {
+	if seat != g.hakem || len(g.hands[g.hakem]) == 0 || g.trumpSet {
 		return nil, ErrWrongPhase
 	}
 	if !suit.Valid() {
@@ -235,7 +242,7 @@ func (g *Game) SelectTrump(suit Suit) ([]Event, error) {
 	}
 	g.trump = suit
 	g.trumpSet = true
-	evs := []Event{{Kind: EventTrumpSelected, Data: TrumpSelectedData{Seat: g.hakem, Suit: suit}}}
+	evs := []Event{{Kind: EventTrumpSelected, Data: TrumpSelectedData{Seat: g.hakem, Suit: suit, Automatic: automatic}}}
 	return g.record(evs), nil
 }
 
@@ -254,6 +261,13 @@ func (g *Game) DealRemainingCards() ([]Event, error) {
 
 // PlayCard plays a card from the seat's hand into the current trick.
 func (g *Game) PlayCard(s Seat, c Card) ([]Event, error) {
+	return g.PlayCardFor(s, c, false)
+}
+
+// PlayCardFor is PlayCard with an automatic flag; the timeout policy uses
+// automatic=true. The turn check still applies: if the timeout already
+// committed an action, the late manual play is rejected here (§42).
+func (g *Game) PlayCardFor(s Seat, c Card, automatic bool) ([]Event, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.phase != PhaseTrickPlay {
@@ -284,7 +298,7 @@ func (g *Game) PlayCard(s Seat, c Card) ([]Event, error) {
 	} else {
 		g.turn = NextSeat(s)
 	}
-	evs := []Event{{Kind: EventCardPlayed, Data: CardPlayedData{Seat: s, Card: c}}}
+	evs := []Event{{Kind: EventCardPlayed, Data: CardPlayedData{Seat: s, Card: c, Automatic: automatic}}}
 	return g.record(evs), nil
 }
 
@@ -346,6 +360,7 @@ func (g *Game) CompleteRound() ([]Event, error) {
 	} else {
 		g.roundsB++
 	}
+	g.roundHistory = append(g.roundHistory, RoundResult{Number: g.roundNumber, WinnerTeam: winner})
 	matchOver := g.roundsA >= g.opts.roundsToWin() || g.roundsB >= g.opts.roundsToWin()
 	events := []Event{{
 		Kind: EventRoundCompleted,

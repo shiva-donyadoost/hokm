@@ -27,7 +27,51 @@ var (
 	ErrNoEmptySlot       = errors.New("room: no empty seat for an AI slot")
 	ErrNotAnAI           = errors.New("room: member is not an AI")
 	ErrCodeConflict      = errors.New("room: could not allocate room code")
+	ErrInvalidRoundCount = errors.New("room: invalid round count")
+	ErrInvalidGameSpeed  = errors.New("room: invalid game speed")
 )
+
+// RoomSettings carries creator-chosen match configuration.
+type RoomSettings struct {
+	RoundCount  int
+	GameSpeed   string // fast | medium | slow
+	ChatEnabled bool
+}
+
+// DefaultRoundCounts are the supported creator options; the list itself is
+// configurable (see config.GameConfig.AllowedRoundCounts).
+var DefaultRoundCounts = []int{1, 3, 5}
+
+// ValidGameSpeeds are the supported speeds; timeouts come from config.
+var ValidGameSpeeds = []string{"fast", "medium", "slow"}
+
+// ValidateSettings checks creator input against the allowed option sets.
+func ValidateSettings(s RoomSettings, allowedRounds []int) error {
+	if s.RoundCount <= 0 {
+		return ErrInvalidRoundCount
+	}
+	ok := false
+	for _, r := range allowedRounds {
+		if r == s.RoundCount {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return ErrInvalidRoundCount
+	}
+	speedOK := false
+	for _, sp := range ValidGameSpeeds {
+		if sp == s.GameSpeed {
+			speedOK = true
+			break
+		}
+	}
+	if !speedOK {
+		return ErrInvalidGameSpeed
+	}
+	return nil
+}
 
 // Visibility controls who can find and join a room.
 type Visibility string
@@ -60,6 +104,10 @@ type Room struct {
 	Members    []Member   `json:"members"` // index == seat, empty seats absent
 	Status     string     `json:"status"`  // lobby | in_game
 	CreatedAt  time.Time  `json:"created_at"`
+	// Match settings chosen by the room creator (impliment.md §5, §10, §31).
+	RoundCount  int    `json:"round_count"` // rounds to win the match
+	GameSpeed   string `json:"game_speed"`  // fast | medium | slow
+	ChatEnabled bool   `json:"chat_enabled"`
 }
 
 // InSeat reports whether the user occupies a seat.
@@ -111,13 +159,16 @@ func (m *Manager) notify(r *Room) {
 }
 
 // Create makes a new room hosted by the given user.
-func (m *Manager) Create(hostID, hostName, name string, visibility Visibility) (Room, error) {
+func (m *Manager) Create(hostID, hostName, name string, visibility Visibility, settings RoomSettings) (Room, error) {
 	name = strings.TrimSpace(name)
 	if l := len(name); l < 2 || l > 40 {
 		return Room{}, ErrInvalidName
 	}
 	if !visibility.Valid() {
 		return Room{}, ErrInvalidVisibility
+	}
+	if err := ValidateSettings(settings, DefaultRoundCounts); err != nil {
+		return Room{}, err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -126,13 +177,16 @@ func (m *Manager) Create(hostID, hostName, name string, visibility Visibility) (
 		return Room{}, err
 	}
 	r := &Room{
-		ID:         newRoomID(),
-		Code:       code,
-		Name:       name,
-		Visibility: visibility,
-		HostID:     hostID,
-		Status:     "lobby",
-		CreatedAt:  time.Now().UTC(),
+		ID:          newRoomID(),
+		Code:        code,
+		Name:        name,
+		Visibility:  visibility,
+		HostID:      hostID,
+		Status:      "lobby",
+		CreatedAt:   time.Now().UTC(),
+		RoundCount:  settings.RoundCount,
+		GameSpeed:   settings.GameSpeed,
+		ChatEnabled: settings.ChatEnabled,
 		Members: []Member{{
 			UserID: hostID, Username: hostName, Seat: 0, Ready: false, IsHost: true,
 		}},

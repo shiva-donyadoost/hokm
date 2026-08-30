@@ -10,6 +10,74 @@ import (
 	"time"
 )
 
+// GameConfig centralizes every gameplay timing/limit (impliment.md §1).
+// Gameplay logic reads these — never numeric literals. Defaults live here
+// only; all are overridable via environment.
+type GameConfig struct {
+	// HakemSelectionTimeout: trump must be chosen within this window
+	// (default 10s); expiry → deterministic automatic trump.
+	HakemSelectionTimeout time.Duration
+	// CardSelectionTimeouts per game speed (fast 5s, medium 10s, slow 15s).
+	CardSelectionTimeouts GameSpeedTimeouts
+	// ReconnectGracePeriod before AI takeover (default 30s).
+	ReconnectGracePeriod time.Duration
+	// Presentation-only values (never coupled to gameplay timeouts):
+	TrickWinnerDisplayDuration time.Duration // default 3s
+	CardPlayAnimationDuration  time.Duration // default 0.5s
+	// AllowedRoundCounts for room creation (default 1, 3, 5).
+	AllowedRoundCounts []int
+}
+
+// GameSpeedTimeouts maps game speed names to card-selection timeouts.
+type GameSpeedTimeouts struct {
+	Fast   time.Duration
+	Medium time.Duration
+	Slow   time.Duration
+}
+
+// CardTimeout returns the card-selection timeout for a speed, defaulting to
+// medium for unknown speeds.
+func (g GameConfig) CardTimeout(speed string) time.Duration {
+	switch speed {
+	case "fast":
+		return g.CardSelectionTimeouts.Fast
+	case "slow":
+		return g.CardSelectionTimeouts.Slow
+	default:
+		return g.CardSelectionTimeouts.Medium
+	}
+}
+
+// DefaultGameConfig returns the built-in defaults; callers may override
+// fields (tests) before use.
+func DefaultGameConfig() GameConfig {
+	return GameConfig{
+		HakemSelectionTimeout:      10 * time.Second,
+		CardSelectionTimeouts:      GameSpeedTimeouts{Fast: 5 * time.Second, Medium: 10 * time.Second, Slow: 15 * time.Second},
+		ReconnectGracePeriod:       30 * time.Second,
+		TrickWinnerDisplayDuration: 3 * time.Second,
+		CardPlayAnimationDuration:  500 * time.Millisecond,
+		AllowedRoundCounts:         []int{1, 3, 5},
+	}
+}
+
+func defaultGameConfig() GameConfig { return DefaultGameConfig() }
+
+func loadGameConfig() GameConfig {
+	g := defaultGameConfig()
+	g.HakemSelectionTimeout = getDur("GAME_HAKEM_SELECTION_TIMEOUT", g.HakemSelectionTimeout)
+	g.CardSelectionTimeouts.Fast = getDur("GAME_CARD_SELECTION_TIMEOUT_FAST", g.CardSelectionTimeouts.Fast)
+	g.CardSelectionTimeouts.Medium = getDur("GAME_CARD_SELECTION_TIMEOUT_MEDIUM", g.CardSelectionTimeouts.Medium)
+	g.CardSelectionTimeouts.Slow = getDur("GAME_CARD_SELECTION_TIMEOUT_SLOW", g.CardSelectionTimeouts.Slow)
+	g.ReconnectGracePeriod = getDur("GAME_RECONNECT_GRACE_PERIOD", g.ReconnectGracePeriod)
+	g.TrickWinnerDisplayDuration = getDur("GAME_TRICK_WINNER_DISPLAY_DURATION", g.TrickWinnerDisplayDuration)
+	g.CardPlayAnimationDuration = getDur("GAME_CARD_PLAY_ANIMATION_DURATION", g.CardPlayAnimationDuration)
+	if counts := getIntList("GAME_ALLOWED_ROUND_COUNTS", nil); counts != nil {
+		g.AllowedRoundCounts = counts
+	}
+	return g
+}
+
 // Config is the process-wide configuration.
 type Config struct {
 	Env       string // development | production
@@ -23,8 +91,7 @@ type Config struct {
 	Postgres PostgresConfig
 	Redis    RedisConfig
 
-	RoundsToWin int
-	TurnTimeout time.Duration
+	Game GameConfig
 }
 
 type PostgresConfig struct {
@@ -63,8 +130,7 @@ func Load() (*Config, error) {
 		Redis: RedisConfig{
 			Addr: get("REDIS_ADDR", "localhost:6379"),
 		},
-		RoundsToWin: getInt("ROUNDS_TO_WIN", 7),
-		TurnTimeout: time.Duration(getInt("TURN_TIMEOUT_SECONDS", 60)) * time.Second,
+		Game: loadGameConfig(),
 	}
 	if c.Env != "development" && c.Env != "production" {
 		return nil, fmt.Errorf("config: invalid APP_ENV %q", c.Env)
@@ -103,4 +169,23 @@ func getInt(key string, def int) int {
 		}
 	}
 	return def
+}
+
+func getIntList(key string, def []int) []int {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return def
+	}
+	parts := strings.Split(v, ",")
+	out := make([]int, 0, len(parts))
+	for _, p := range parts {
+		var n int
+		if _, err := fmt.Sscanf(strings.TrimSpace(p), "%d", &n); err == nil && n > 0 {
+			out = append(out, n)
+		}
+	}
+	if len(out) == 0 {
+		return def
+	}
+	return out
 }

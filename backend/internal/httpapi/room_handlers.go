@@ -26,6 +26,10 @@ func (s *Server) roomErr(err error) error {
 		return apiError(http.StatusUnprocessableEntity, "validation", "room name must be 2-40 characters")
 	case errors.Is(err, room.ErrInvalidVisibility):
 		return apiError(http.StatusUnprocessableEntity, "validation", "visibility must be public or private")
+	case errors.Is(err, room.ErrInvalidRoundCount):
+		return apiError(http.StatusUnprocessableEntity, "validation", "invalid round count")
+	case errors.Is(err, room.ErrInvalidGameSpeed):
+		return apiError(http.StatusUnprocessableEntity, "validation", "game speed must be fast, medium or slow")
 	case errors.Is(err, room.ErrCannotKickSelf):
 		return apiError(http.StatusUnprocessableEntity, "validation", "cannot kick yourself")
 	case errors.Is(err, room.ErrNoEmptySlot):
@@ -53,8 +57,11 @@ func (s *Server) roomFromRequest(w http.ResponseWriter, r *http.Request, idParam
 }
 
 type createRoomRequest struct {
-	Name       string `json:"name"`
-	Visibility string `json:"visibility"`
+	Name        string `json:"name"`
+	Visibility  string `json:"visibility"`
+	RoundCount  int    `json:"round_count"`
+	GameSpeed   string `json:"game_speed"`
+	ChatEnabled *bool  `json:"chat_enabled"`
 }
 
 func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
@@ -68,8 +75,24 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, apiError(http.StatusBadRequest, "bad_request", "invalid JSON body"))
 		return
 	}
+	// Sensible defaults when the creator omits fields.
+	if req.RoundCount == 0 {
+		req.RoundCount = 1
+	}
+	if req.GameSpeed == "" {
+		req.GameSpeed = "medium"
+	}
+	chatEnabled := true
+	if req.ChatEnabled != nil {
+		chatEnabled = *req.ChatEnabled
+	}
+	settings := room.RoomSettings{
+		RoundCount:  req.RoundCount,
+		GameSpeed:   req.GameSpeed,
+		ChatEnabled: chatEnabled,
+	}
 	username := s.usernameFor(uid)
-	rm, err := s.rooms.Create(uid, username, req.Name, room.Visibility(req.Visibility))
+	rm, err := s.rooms.Create(uid, username, req.Name, room.Visibility(req.Visibility), settings)
 	if err != nil {
 		writeError(w, r, s.roomErr(err))
 		return

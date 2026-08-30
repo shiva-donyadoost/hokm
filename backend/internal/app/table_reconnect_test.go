@@ -7,6 +7,7 @@ import (
 
 	app "github.com/hokm/platform/internal/app"
 	"github.com/hokm/platform/internal/auth"
+	"github.com/hokm/platform/internal/config"
 	"github.com/hokm/platform/internal/httpapi"
 	"github.com/hokm/platform/internal/infra/memory"
 	"github.com/hokm/platform/internal/rating"
@@ -22,7 +23,9 @@ func newTimeoutStack(t *testing.T) *stack {
 	users := app.NewUserService(memory.NewUserStore(), tokens, auth.NewMemoryRefreshStore(), time.Hour)
 	rooms := room.NewManager()
 	scores := rating.NewMemoryStore()
-	tables := app.NewTableManagerWithTimeout(rooms, tokens, 1, scores, 300*time.Millisecond)
+	gameCfg := config.DefaultGameConfig()
+	gameCfg.ReconnectGracePeriod = 300 * time.Millisecond
+	tables := app.NewTableManager(rooms, tokens, scores, gameCfg)
 	hub := ws.NewHub(tables)
 	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil, scores).Handler())
 	t.Cleanup(ts.Close)

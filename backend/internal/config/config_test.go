@@ -17,8 +17,20 @@ func TestLoadDefaults(t *testing.T) {
 	if c.Addr != ":8080" {
 		t.Errorf("addr = %q", c.Addr)
 	}
-	if c.RoundsToWin != 7 {
-		t.Errorf("roundsToWin = %d, want 7", c.RoundsToWin)
+	if c.Game.AllowedRoundCounts == nil || len(c.Game.AllowedRoundCounts) == 0 {
+		t.Errorf("allowedRoundCounts = %v", c.Game.AllowedRoundCounts)
+	}
+	if c.Game.HakemSelectionTimeout != 10*time.Second {
+		t.Errorf("hakemSelectionTimeout = %v, want 10s", c.Game.HakemSelectionTimeout)
+	}
+	if c.Game.CardTimeout("fast") != 5*time.Second {
+		t.Errorf("fast timeout = %v, want 5s", c.Game.CardTimeout("fast"))
+	}
+	if c.Game.CardTimeout("slow") != 15*time.Second {
+		t.Errorf("slow timeout = %v, want 15s", c.Game.CardTimeout("slow"))
+	}
+	if c.Game.ReconnectGracePeriod != 30*time.Second {
+		t.Errorf("grace = %v, want 30s", c.Game.ReconnectGracePeriod)
 	}
 	if c.AccessTTL != 15*time.Minute {
 		t.Errorf("accessTTL = %v", c.AccessTTL)

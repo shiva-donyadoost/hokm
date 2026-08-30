@@ -5,7 +5,25 @@ Rules: phases are executed strictly in order; each phase is implemented,
 tested, linted, documented, committed (Conventional Commits), and marked
 complete before the next begins. See `agents.md` HARD RULES.
 
-## Phases
+## Enhancement Wave 2 — Gameplay UX, Timing, Persistence & Chat
+
+Source: `impliment.md` (2026-08-30). Hard rule: **no hard-coded gameplay
+values** — every timing/limit lives in the configuration layer.
+
+| # | Phase | Scope | Status |
+|---|-------|-------|--------|
+| A | Configuration Architecture | GameConfig (hakem timeout 10s, card timeouts fast 5s / medium 10s / slow 15s, reconnect grace 30s, trick-winner display 3s, card-play animation 0.5s, round options) + Room settings (RoundCount 1/3/5, GameSpeed, ChatEnabled) | planned |
+| B | Timers & State Machine | server-authoritative deadlines (trump + card), auto actions on expiry (deterministic trump = most trumps; card = lowest legal), Automatic flags, race-safe single table timer | planned |
+| C | Dealing Animation | animated deal, private visibility (existing views) | planned |
+| D | Sequential Card Presentation | card-play animation 0.5s (config) | planned |
+| E | Trick Winner Animation | winner reveal 3s + collect-toward-winner animation | planned |
+| F | Round Score Display | previous round winners, match score from server (round history in view) | planned |
+| G | Card Interaction | arc hand, tap-to-select + tap-to-play, pointer drag & drop, drag cancellation | planned |
+| H | Persistent Session | refresh keeps auth + room + game state (existing tokens + subscribe replay; verified) | planned |
+| I | AI Takeover | configurable grace period (existing) + explicit events | planned |
+| J | Chat Improvements | room chat toggle (server-enforced), emoji picker, unread badge | planned |
+| K | SVG Card Assets | 52 faces + card-back asset, resolver + build-time validation | planned |
+| L | Testing | unit/integration for timers, auto-play, room settings; regression suite | planned |
 
 | # | Phase | Scope | Status |
 |---|-------|-------|--------|

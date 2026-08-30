@@ -40,3 +40,9 @@ type CompletedTrick struct {
 	Winner     Seat         `json:"winner"`
 	WinnerTeam Team         `json:"winner_team"`
 }
+
+// RoundResult records who won a completed round (§18).
+type RoundResult struct {
+	Number     int  `json:"number"`
+	WinnerTeam Team `json:"winner_team"`
+}

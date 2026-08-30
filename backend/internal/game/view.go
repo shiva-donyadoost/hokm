@@ -21,7 +21,14 @@ type SeatView struct {
 
 	TricksThisRound [2]int `json:"tricks_this_round"` // index by Team
 	RoundsWon       [2]int `json:"rounds_won"`        // index by Team
-	MatchOver       bool   `json:"match_over"`
+	// RoundHistory lists each completed round's winner (impliment.md §18).
+	RoundHistory []RoundResult `json:"round_history,omitempty"`
+	MatchOver    bool          `json:"match_over"`
+
+	// Deadline drives the client countdown; zero means no timer is running.
+	// The server remains authoritative and auto-plays on expiry (§12).
+	DeadlineUnixMs int64  `json:"deadline_unix_ms,omitempty"`
+	DeadlineKind   string `json:"deadline_kind,omitempty"` // "trump" | "card"
 }
 
 // ViewFor returns the safe view for the given seat. It is a point-in-time
@@ -41,6 +48,7 @@ func (g *Game) ViewFor(s Seat) SeatView {
 		RoundsWon:       [2]int{g.roundsA, g.roundsB},
 		MatchOver:       g.phase == PhaseGameComplete,
 	}
+	v.RoundHistory = append(v.RoundHistory, g.roundHistory...)
 	if g.trumpSet {
 		v.Trump = g.trump
 	}

@@ -39,14 +39,16 @@ type CardsDealtData struct {
 
 // TrumpSelectedData announces the chosen trump suit.
 type TrumpSelectedData struct {
-	Seat Seat `json:"seat"`
-	Suit Suit `json:"suit"`
+	Seat      Seat `json:"seat"`
+	Suit      Suit `json:"suit"`
+	Automatic bool `json:"automatic"` // true when chosen by the timeout policy
 }
 
 // CardPlayedData announces one card played into the current trick.
 type CardPlayedData struct {
-	Seat Seat `json:"seat"`
-	Card Card `json:"card"`
+	Seat      Seat `json:"seat"`
+	Card      Card `json:"card"`
+	Automatic bool `json:"automatic"` // true when played by the timeout policy
 }
 
 // TrickCompletedData announces a finished trick (public info).

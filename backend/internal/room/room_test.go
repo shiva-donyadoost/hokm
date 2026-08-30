@@ -7,9 +7,13 @@ import (
 
 func newTestManager() *Manager { return NewManager() }
 
+func defaultSettings() RoomSettings {
+	return RoomSettings{RoundCount: 1, GameSpeed: "medium", ChatEnabled: true}
+}
+
 func TestCreateAndCodeLookup(t *testing.T) {
 	m := newTestManager()
-	r, err := m.Create("u1", "Alice", "Friday Night", Public)
+	r, err := m.Create("u1", "Alice", "Friday Night", Public, defaultSettings())
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -27,7 +31,7 @@ func TestCreateAndCodeLookup(t *testing.T) {
 
 func TestJoinSeatAllocation(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "Room", Public)
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
 	for i := 2; i <= 4; i++ {
 		r, err := m.Join(r.Code, string(rune('0'+i)), "P")
 		if err != nil {
@@ -58,7 +62,7 @@ func TestJoinSeatAllocation(t *testing.T) {
 
 func TestLeaveTransfersHostAndDeletesEmpty(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "Room", Public)
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
 	_, _ = m.Join(r.Code, "u2", "Bob")
 	_, err := m.Leave(r.ID, "u1")
 	if err != nil {
@@ -80,7 +84,7 @@ func TestLeaveTransfersHostAndDeletesEmpty(t *testing.T) {
 
 func TestReadyAndStart(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "Room", Public)
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
 	_, _ = m.Join(r.Code, "u2", "Bob")
 	if _, err := m.SetReady(r.ID, "u2", true); err != nil {
 		t.Fatalf("SetReady: %v", err)
@@ -96,7 +100,7 @@ func TestReadyAndStart(t *testing.T) {
 
 func TestKickRules(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "Room", Public)
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
 	_, _ = m.Join(r.Code, "u2", "Bob")
 	_, _ = m.Join(r.Code, "u3", "Cara")
 
@@ -117,7 +121,7 @@ func TestKickRules(t *testing.T) {
 
 func TestAISlots(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "Room", Private)
+	r, _ := m.Create("u1", "Alice", "Room", Private, defaultSettings())
 	got, err := m.AddAI(r.ID, "u1", "hard", "Robot")
 	if err != nil {
 		t.Fatalf("AddAI: %v", err)
@@ -149,8 +153,8 @@ func TestAISlots(t *testing.T) {
 
 func TestListPublicOnly(t *testing.T) {
 	m := newTestManager()
-	pub, _ := m.Create("u1", "A", "Public Room", Public)
-	_, _ = m.Create("u2", "B", "Private Room", Private)
+	pub, _ := m.Create("u1", "A", "Public Room", Public, defaultSettings())
+	_, _ = m.Create("u2", "B", "Private Room", Private, defaultSettings())
 	list := m.ListPublic()
 	if len(list) != 1 || list[0].ID != pub.ID {
 		t.Fatalf("public list = %+v", list)
@@ -161,7 +165,7 @@ func TestNotifierFires(t *testing.T) {
 	m := newTestManager()
 	updates := make(chan Room, 8)
 	m.SetNotifier(chanNotifier(updates))
-	r, _ := m.Create("u1", "Alice", "Room", Public)
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
 	_, _ = m.Join(r.Code, "u2", "Bob")
 	select {
 	case got := <-updates:
@@ -181,7 +185,7 @@ func TestCodesUniqueAcrossManyRooms(t *testing.T) {
 	m := newTestManager()
 	seen := map[string]bool{}
 	for i := 0; i < 200; i++ {
-		r, err := m.Create("u", "A", "Room", Public)
+		r, err := m.Create("u", "A", "Room", Public, defaultSettings())
 		if err != nil {
 			t.Fatalf("create %d: %v", i, err)
 		}

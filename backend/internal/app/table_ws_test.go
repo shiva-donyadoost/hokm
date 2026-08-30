@@ -14,6 +14,7 @@ import (
 
 	app "github.com/hokm/platform/internal/app"
 	"github.com/hokm/platform/internal/auth"
+	"github.com/hokm/platform/internal/config"
 	"github.com/hokm/platform/internal/game"
 	"github.com/hokm/platform/internal/httpapi"
 	"github.com/hokm/platform/internal/infra/memory"
@@ -28,6 +29,7 @@ type stack struct {
 	ts     *httptest.Server
 	client *http.Client
 	scores *rating.MemoryStore
+	tables *app.TableManager
 }
 
 func newStack(t *testing.T) *stack {
@@ -36,11 +38,12 @@ func newStack(t *testing.T) *stack {
 	users := app.NewUserService(memory.NewUserStore(), tokens, auth.NewMemoryRefreshStore(), time.Hour)
 	rooms := room.NewManager()
 	scores := rating.NewMemoryStore()
-	tables := app.NewTableManager(rooms, tokens, 1, scores) // RoundsToWin=1: one round decides
+	gameCfg := config.DefaultGameConfig()
+	tables := app.NewTableManager(rooms, tokens, scores, gameCfg) // RoundsToWin=1: one round decides
 	hub := ws.NewHub(tables)
 	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil, nil).Handler())
 	t.Cleanup(ts.Close)
-	return &stack{ts: ts, client: ts.Client(), scores: scores}
+	return &stack{ts: ts, client: ts.Client(), scores: scores, tables: tables}
 }
 
 func (s *stack) post(t *testing.T, path, token string, body any) map[string]any {
@@ -83,6 +86,7 @@ type wsClient struct {
 	mu     sync.Mutex
 	state  game.SeatView
 	roomID string
+	events []ws.Envelope
 
 	msgs chan ws.Envelope
 	done chan struct{}
@@ -141,9 +145,18 @@ func (c *wsClient) handle(env ws.Envelope) {
 		b, _ := json.Marshal(env.Payload)
 		_ = json.Unmarshal(b, &r)
 		c.roomID = r.ID
+	case ws.MsgEvents:
+		c.events = append(c.events, env)
 	case ws.MsgError:
 		c.t.Fatalf("%s: server error: %s", c.name, env.Payload)
 	}
+}
+
+// allEvents returns received EVENTS envelopes (call after drain).
+func (c *wsClient) allEvents() []ws.Envelope {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]ws.Envelope(nil), c.events...)
 }
 
 // send transmits a command.

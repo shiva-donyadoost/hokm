@@ -67,7 +67,7 @@ func main() {
 	tokens := auth.NewTokenManager(cfg.JWTSecret, cfg.AccessTTL)
 	users := app.NewUserService(userRepo, tokens, refreshStore, cfg.RefreshTTL)
 	rooms := room.NewManager()
-	tables := app.NewTableManagerWithTimeout(rooms, tokens, cfg.RoundsToWin, scores, cfg.TurnTimeout)
+	tables := app.NewTableManager(rooms, tokens, scores, cfg.Game)
 	hub := ws.NewHub(tables)
 
 	srv := &http.Server{

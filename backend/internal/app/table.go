@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/hokm/platform/internal/ai"
+	"github.com/hokm/platform/internal/config"
 	"github.com/hokm/platform/internal/game"
 	"github.com/hokm/platform/internal/metrics"
 	"github.com/hokm/platform/internal/rating"
@@ -22,6 +23,7 @@ var (
 	ErrNotAllReady   = errors.New("app: not all members are ready")
 	ErrNeedFourSeats = errors.New("app: room needs exactly four seated members")
 	ErrNotSubscribed = errors.New("app: not subscribed to this room")
+	ErrChatDisabled  = errors.New("app: chat is disabled for this room")
 	ErrInternal      = errors.New("app: internal error")
 )
 
@@ -38,20 +40,31 @@ type Table struct {
 	disconnected map[game.Seat]time.Time
 	rng          *rand.Rand
 	sentEvents   int // events already broadcast
+
+	// Server-authoritative timing (impliment.md §12, §41): one timer per
+	// table, recomputed on every state change; a generation counter makes
+	// stale timer fires harmless (§42).
+	speed          string // fast | medium | slow (room setting)
+	timer          *time.Timer
+	timerGen       int
+	deadlineUnixMs int64
+	deadlineKind   string
+	hakemTimeout   time.Duration // from GameConfig
+	cardTimeout    time.Duration // per speed, from GameConfig
+	tm             *TableManager // back-reference for timer callbacks
 }
 
 // TableManager implements ws.CommandHandler and orchestrates matches.
 type TableManager struct {
 	mu          sync.RWMutex
-	tables      map[string]*Table                 // roomID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ table
-	subs        map[string]map[string]*ws.Session // roomID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ userID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ session
+	tables      map[string]*Table                 // roomID → table
+	subs        map[string]map[string]*ws.Session // roomID → userID → session
 	rooms       *room.Manager
 	tokens      tokenVerifier
-	roundsToWin int
-	turnTimeout time.Duration // disconnect grace before AI takeover
+	gameCfg     config.GameConfig
 	chat        *ChatService
-	scores      rating.ScoreStore            // nil ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ stats not recorded
-	prevMembers map[string]map[string]string // roomID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ userID ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ username
+	scores      rating.ScoreStore            // nil → stats not recorded
+	prevMembers map[string]map[string]string // roomID → userID → username
 }
 
 // tokenVerifier is the subset of auth.TokenManager we need (kept narrow so
@@ -60,21 +73,16 @@ type tokenVerifier interface {
 	VerifyAccess(token string) (string, error)
 }
 
-// NewTableManager uses the default 60s disconnect grace period.
-func NewTableManager(rooms *room.Manager, tokens tokenVerifier, roundsToWin int, scores rating.ScoreStore) *TableManager {
-	return NewTableManagerWithTimeout(rooms, tokens, roundsToWin, scores, 60*time.Second)
-}
-
-// NewTableManagerWithTimeout tunes the disconnect grace period (tests use
-// short timeouts; see Phase 14).
-func NewTableManagerWithTimeout(rooms *room.Manager, tokens tokenVerifier, roundsToWin int, scores rating.ScoreStore, turnTimeout time.Duration) *TableManager {
+// NewTableManager builds the manager from the centralized GameConfig —
+// hakem/card timeouts, reconnect grace, round counts all come from config
+// (impliment.md §1, §A).
+func NewTableManager(rooms *room.Manager, tokens tokenVerifier, scores rating.ScoreStore, cfg config.GameConfig) *TableManager {
 	tm := &TableManager{
 		tables:      make(map[string]*Table),
 		subs:        make(map[string]map[string]*ws.Session),
 		rooms:       rooms,
 		tokens:      tokens,
-		roundsToWin: roundsToWin,
-		turnTimeout: turnTimeout,
+		gameCfg:     cfg,
 		chat:        NewChatService(),
 		scores:      scores,
 		prevMembers: make(map[string]map[string]string),
@@ -120,12 +128,12 @@ func (tm *TableManager) RoomUpdated(r room.Room) {
 	prev := tm.prevMembers[r.ID]
 	if prev != nil {
 		for uid, name := range current {
-			if _, was := prev[uid]; !was {
+			if _, was := prev[uid]; !was && r.ChatEnabled {
 				systemMsgs = append(systemMsgs, name+" joined the room")
 			}
 		}
 		for uid, name := range prev {
-			if _, still := current[uid]; !still {
+			if _, still := current[uid]; !still && r.ChatEnabled {
 				systemMsgs = append(systemMsgs, name+" left the room")
 			}
 		}
@@ -168,9 +176,12 @@ func (tm *TableManager) OnDisconnect(s *ws.Session) {
 		for i := range t.sessions {
 			if t.sessions[i] == s {
 				t.sessions[i] = nil
-				// Mark the grace period for AI takeover (Phase 14).
+				// Grace period starts (impliment.md §28); AI takeover when
+				// it expires (§29).
 				if m, ok := t.memberAt(game.Seat(i)); ok && !m.IsAI && t.g != nil {
-					t.disconnected[game.Seat(i)] = time.Now().Add(tm.turnTimeout)
+					seat := game.Seat(i)
+					t.disconnected[seat] = time.Now().Add(tm.gameCfg.ReconnectGracePeriod)
+					t.armTakeoverLocked(tm, seat)
 				}
 			}
 		}
@@ -216,7 +227,8 @@ func (tm *TableManager) HandleCommand(s *ws.Session, env ws.Envelope) error {
 	}
 }
 
-// sendChat validates membership, appends to history, and broadcasts.
+// sendChat validates membership + the room's chat setting (§31), appends to
+// history, and broadcasts.
 func (tm *TableManager) sendChat(s *ws.Session, roomID, body string) error {
 	rm, err := tm.rooms.Get(roomID)
 	if err != nil {
@@ -224,6 +236,9 @@ func (tm *TableManager) sendChat(s *ws.Session, roomID, body string) error {
 	}
 	if !rm.InSeat(s.UserID) {
 		return ErrNotSubscribed
+	}
+	if !rm.ChatEnabled {
+		return ErrChatDisabled
 	}
 	username := s.UserID
 	for _, m := range rm.Members {
@@ -259,9 +274,12 @@ func (tm *TableManager) subscribe(s *ws.Session, roomID string) error {
 
 	// Lobby snapshot.
 	s.Send(ws.Envelope{Type: ws.MsgRoom, Payload: mustMarshal(rm)})
-	// Chat history so the client renders the recent conversation.
-	for _, msg := range tm.chat.History(roomID, 50) {
-		s.Send(ws.Envelope{Type: ws.MsgChat, Payload: mustMarshal(msg)})
+	// Chat history so the client renders the recent conversation (only when
+	// chat is enabled for this room, §31).
+	if rm.ChatEnabled {
+		for _, msg := range tm.chat.History(roomID, 50) {
+			s.Send(ws.Envelope{Type: ws.MsgChat, Payload: mustMarshal(msg)})
+		}
 	}
 	// Live game snapshot if a table exists.
 	if table != nil {
@@ -303,12 +321,16 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 	for _, m := range rm.Members {
 		players[m.Seat] = game.Player{ID: m.UserID, Name: m.Username}
 	}
-	g, err := game.NewGame(players, game.Options{RoundsToWin: tm.roundsToWin})
+	g, err := game.NewGame(players, game.Options{RoundsToWin: t.room.RoundCount})
 	if err != nil {
 		return err
 	}
 	t.g = g
 	t.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	t.speed = t.room.GameSpeed
+	t.tm = tm
+	t.hakemTimeout = tm.gameCfg.HakemSelectionTimeout
+	t.cardTimeout = tm.gameCfg.CardTimeout(t.speed)
 	for _, m := range rm.Members {
 		if m.IsAI {
 			t.ai[m.Seat] = ai.New(m.AIDifficulty, t.rng)
@@ -444,6 +466,17 @@ func (t *Table) aiLoop(tm *TableManager) {
 	for steps < 100000 {
 		steps++
 		switch g.Phase() {
+		case game.PhaseHakemSelection:
+			// Subsequent rounds: hakem already set by rotation; this is a
+			// no-op then deals (first round: confirms the ace-draw hakem).
+			if _, err := g.SelectHakem(); err != nil {
+				slog.Error("ai: select hakem", "err", err)
+				return
+			}
+			if _, err := g.DealInitialCards(); err != nil {
+				slog.Error("ai: deal initial", "err", err)
+				return
+			}
 		case game.PhaseTrumpSelection:
 			seat := g.Hakem()
 			if t.ai[seat] == nil {
@@ -564,7 +597,8 @@ func (tm *TableManager) recordMatch(t *Table, evs []game.Event) {
 }
 
 // broadcast sends per-seat views and *new* public events to all seated
-// sessions. Caller holds t.mu. Only public event kinds cross the wire.
+// sessions, then recomputes the authoritative deadline. Caller holds t.mu.
+// Only public event kinds cross the wire.
 func (t *Table) broadcast() {
 	evs := t.g.Events()
 	fresh := evs
@@ -579,11 +613,15 @@ func (t *Table) broadcast() {
 		if sess == nil {
 			continue
 		}
-		sess.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(t.g.ViewFor(game.Seat(seat)))})
+		v := t.g.ViewFor(game.Seat(seat))
+		v.DeadlineUnixMs = t.deadlineUnixMs
+		v.DeadlineKind = t.deadlineKind
+		sess.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(v)})
 		for _, ev := range public {
 			sess.Send(ws.Envelope{Type: ws.MsgEvents, Name: string(ev.Kind), Payload: mustMarshal(ev.Data)})
 		}
 	}
+	t.rescheduleTimerLocked()
 }
 
 // publicEvents returns events safe for everyone (no private hands).
