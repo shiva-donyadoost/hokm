@@ -44,7 +44,7 @@ export function Profile() {
       </section>
       <p className="text-center mt-4">
         <Link className="text-sm text-slate-500 hover:text-slate-300" to="/rooms">
-          ← back to rooms
+          - back to rooms
         </Link>
       </p>
     </div>

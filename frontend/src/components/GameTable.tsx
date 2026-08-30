@@ -23,8 +23,8 @@ function memberBySeat(room: Room, seat: number) {
   return room.members.find((m) => m.seat === seat) ?? null
 }
 
-// ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ countdown bar (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§9, ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§12): renders from the authoritative server
-// deadline; recalculated locally ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â no per-second server traffic. ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬
+// Countdown bar (impliment.md section 9): renders from the authoritative
+// server deadline; recalculated locally - no per-second server traffic.
 function CountdownBar({ deadlineMs, label }: { deadlineMs: number; label: string }) {
   const [remaining, setRemaining] = useState(() => Math.max(0, deadlineMs - Date.now()))
   useEffect(() => {
@@ -62,7 +62,7 @@ export function GameTable({ room, view }: GameTableProps) {
   const lastTrickSeen = useRef(0)
   const drag = useRef<{ card: string | null; startX: number; startY: number; dx: number; dy: number } | null>(null)
 
-  // Unread badge (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§33): count others' messages while chat is closed.
+  // Unread badge: count others' messages while chat is closed.
   const lastSeenChat = useRef(chat.length)
   useEffect(() => {
     if (chatOpen) {
@@ -75,7 +75,7 @@ export function GameTable({ room, view }: GameTableProps) {
     lastSeenChat.current = chat.length
   }, [chat, chatOpen, myId])
 
-  // Winner reveal                                           collect animation, driven by server trick events (                    16).
+  // Winner reveal -> collect animation, driven by server trick events.
   useEffect(() => {
     const lt = view.last_trick
     if (!lt || lt.number === lastTrickSeen.current) return
@@ -92,7 +92,7 @@ export function GameTable({ room, view }: GameTableProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.last_trick?.number])
 
-  // Dealing animation trigger: hand size jumps from 0 (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§6).
+  // Dealing animation trigger: hand size jumps from 0 to the initial deal.
   const handLen = view.your_hand?.length ?? 0
   const prevHand = useRef(0)
   useEffect(() => {
@@ -128,13 +128,13 @@ export function GameTable({ room, view }: GameTableProps) {
   const onCardTap = (c: { suit: Suit; rank: number }) => {
     const k = keyOf(c)
     if (selected === k) {
-      tryPlay(c) // second tap: submit (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§21)
+      tryPlay(c) // second tap: submit
     } else {
       setSelected(k) // first tap: select/highlight
     }
   }
 
-  // Drag & drop via pointer events (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§22ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§23).
+  // Drag and drop via pointer events.
   const onDragStart = (e: ReactPointerEvent, c: { suit: Suit; rank: number }) => {
     if (!isLegal(c)) return
     drag.current = { card: keyOf(c), startX: e.clientX, startY: e.clientY, dx: 0, dy: 0 }
@@ -159,19 +159,18 @@ export function GameTable({ room, view }: GameTableProps) {
     }
     const played = view.your_hand?.find((c) => keyOf(c) === d.card)
     if (played && Math.abs(d.dy) > 80 && isLegal(played)) {
-      tryPlay(played) // released toward the table (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§22)
+      tryPlay(played) // released toward the table
     }
-    // otherwise: cancelled ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â card snaps back, no gameplay action (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§23)
+    // otherwise: cancelled - card snaps back, no gameplay action
   }
 
   const trumpPending =
     view.phase === 'trump_selection' && view.hakem === view.you && !view.trump
 
-  // Hakem trump deadline (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§8ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§9).
+  // Server-authoritative deadlines.
   const hakemDeadline =
     view.phase === 'trump_selection' && view.deadline_kind === 'trump'
       ? (view.deadline_unix_ms ?? 0) : 0
-  // My card-play deadline (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§10).
   const myCardDeadline =
     myTurn && view.deadline_kind === 'card' ? (view.deadline_unix_ms ?? 0) : 0
   const activeDeadline = hakemDeadline || myCardDeadline
@@ -179,44 +178,43 @@ export function GameTable({ room, view }: GameTableProps) {
   const rel = (offset: number) => (view.you + offset) % 4
   const hand = view.your_hand ?? []
 
-  // Reveal state check: show winner overlay for the LAST completed trick
-  // while the reveal timer runs (presentation only, ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§14ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§15).
+  // Winner reveal overlay for the last completed trick (presentation only).
   const showReveal = reveal !== null && view.last_trick !== null &&
     (view.current_trick?.length ?? 0) === 0
   const revealWinnerSeat = reveal?.winner ?? -1
 
   return (
     <div className="flex flex-col min-h-dvh bg-gradient-to-b from-table-900 via-table-800 to-table-900">
-      {/* Score bar (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§19) */}
+      {/* Score bar */}
       <div className="flex items-center justify-between px-3 py-2 text-xs sm:text-sm">
         <div className="flex gap-3">
           <span className="font-semibold text-teal-200">
-            A {view.rounds_won[0]} ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {view.tricks_this_round[0]} tricks
+            Team A {view.rounds_won[0]} - {view.tricks_this_round[0]} tricks
           </span>
           <span className="text-slate-400">vs</span>
           <span className="font-semibold text-rose-200">
-            {view.tricks_this_round[1]} tricks ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· {view.rounds_won[1]} B
+            {view.tricks_this_round[1]} tricks - {view.rounds_won[1]} Team B
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-slate-400">round {view.round_number}/{room.round_count}</span>
           {view.trump ? (
             <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 uppercase" aria-label={'trump is ' + view.trump}>
-              {view.trump === 'spades' ? 'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢Ãƒâ€šÃ‚Â ' : view.trump === 'hearts' ? 'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢Ãƒâ€šÃ‚Â¥' : view.trump === 'diamonds' ? 'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢Ãƒâ€šÃ‚Â¦' : 'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢Ãƒâ€šÃ‚Â£'} {view.trump}
+              trump: {view.trump}
             </span>
           ) : null}
         </div>
       </div>
 
-      {/* Round history strip (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§18) */}
+      {/* Round history strip */}
       {room.round_count > 1 ? (
         <div className="flex gap-1.5 px-3 pb-1 text-[11px] overflow-x-auto" aria-label="round results">
           {Array.from({ length: room.round_count }).map((_, i) => {
             const num = i + 1
             const done = (view.round_history ?? []).find((r: RoundResult) => r.number === num)
             const label =
-              done ? `R${num} ${done.winner_team === 0 ? 'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚Â A' : 'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚ÂÃƒÂ¢Ã¢â€šÂ¬Ã‚Â B'}` :
-              num === view.round_number ? `R${num} playing` : `R${num}`
+              done ? `R${num}: ${done.winner_team === 0 ? 'Team A' : 'Team B'} won` :
+              num === view.round_number ? `R${num} playing` : `R${num} not started`
             return (
               <span
                 key={num}
@@ -280,14 +278,14 @@ export function GameTable({ room, view }: GameTableProps) {
           />
         </div>
 
-        {/* Arc hand (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§20) with tap/drag (ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§21ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã…â€œÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§23) */}
+        {/* Arc hand with tap/drag interaction */}
         <div className="flex flex-col items-center gap-1 pb-2">
           <div
             className={`text-xs px-2 py-0.5 rounded-full ${
               myTurn ? 'bg-amber-400 text-slate-900 font-bold' : 'bg-slate-800 text-slate-400'
             }`}
           >
-            {myTurn ? (selected ? 'tap again to play' : 'your turn') : view.turn === -1 ? 'resolvingÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦' : 'waiting'}
+            {myTurn ? (selected ? 'tap again to play' : 'your turn') : view.turn === -1 ? 'resolving...' : 'waiting'}
           </div>
           <div className="flex items-end justify-center h-28 sm:h-32" key={dealKey}>
             {hand.map((c, i) => {
@@ -295,7 +293,7 @@ export function GameTable({ room, view }: GameTableProps) {
               const center = (hand.length - 1) / 2
               const angle = (i - center) * 7
               const lift = selected === k ? -26 : Math.abs(i - center) * 2
-                          const dealDelay = prevHand.current === 5 ? i * ANIM.dealStaggerMs : 0
+              const dealDelay = prevHand.current === 5 ? i * ANIM.dealStaggerMs : 0
               return (
                 <div
                   key={k}
@@ -336,7 +334,7 @@ export function GameTable({ room, view }: GameTableProps) {
             onClick={() => setChatOpen((v) => !v)}
             aria-label={chatOpen ? 'close chat' : `open chat${unread ? `, ${unread} unread` : ''}`}
           >
-            ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢Ãƒâ€šÃ‚Â¬ Chat{!chatOpen && unread ? ` (${unread})` : ''}
+            Chat{!chatOpen && unread ? ` (${unread})` : ''}
           </button>
           {chatOpen ? (
             <div className="fixed bottom-14 left-2 z-40 w-72 shadow-2xl">
@@ -349,7 +347,7 @@ export function GameTable({ room, view }: GameTableProps) {
       {trumpPending ? (
         <div className="fixed inset-x-0 bottom-0 p-4 bg-slate-900/95 border-t border-amber-400/40">
           <p className="text-center text-sm text-amber-300 mb-2">
-            You are the Hakem ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â choose trump
+            You are the Hakem - choose trump
           </p>
           <div className="flex justify-center gap-2">
             {Suits.map((s: Suit) => (
@@ -397,8 +395,8 @@ function SeatPlate({ member, cardCount, isTurn, isHakem, deadline }: {
           ${isHakem ? 'ring-2 ring-amber-300' : ''}`}
         title={isHakem ? 'Hakem' : undefined}
       >
-        {isHakem ? 'ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ÃƒÂ¢Ã¢â€šÂ¬Ã‹Å“ ' : ''}
-        {member ? member.username + (member.is_ai ? ' ÃƒÆ’Ã‚Â°Ãƒâ€¦Ã‚Â¸Ãƒâ€šÃ‚Â¤ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Å“' : '') : 'ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦'}
+        {isHakem ? '[H] ' : ''}
+        {member ? member.username + (member.is_ai ? ' [AI]' : '') : '...'}
       </div>
       {isTurn && deadline ? <CountdownBar deadlineMs={deadline} label="time to act" /> : null}
       <div className="flex gap-0.5">
@@ -419,7 +417,7 @@ function MatchOverOverlay({ view }: { view: SeatView }) {
           {won ? 'Victory!' : 'Defeat'}
         </h2>
         <p className="text-slate-300 mb-4">
-          Team A {view.rounds_won[0]} ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â {view.rounds_won[1]} Team B
+          Team A {view.rounds_won[0]} - {view.rounds_won[1]} Team B
         </p>
         <a href="/rooms" className="inline-block px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 font-semibold">
           Back to rooms

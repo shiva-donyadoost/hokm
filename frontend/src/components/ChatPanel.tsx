@@ -3,8 +3,8 @@ import { useGame } from '../state/game'
 import { GAME } from '../config'
 
 // ChatPanel renders room chat: history + live messages + input with an
-// inline emoji picker (§32). The picker is game-scoped and lightweight so
-// it stays inside the viewport on mobile (§50).
+// inline emoji picker (section 32). The picker is game-scoped and lightweight so
+// it stays inside the viewport on mobile (section 50).
 export function ChatPanel({ compact = false }: { compact?: boolean }) {
   const chat = useGame((s) => s.chat)
   const sendChat = useGame((s) => s.sendChat)
@@ -26,7 +26,7 @@ export function ChatPanel({ compact = false }: { compact?: boolean }) {
         }`}
       >
         {chat.length === 0 ? (
-          <p className="text-xs text-slate-600">no messages yet — say salaam</p>
+          <p className="text-xs text-slate-600">no messages yet - say salaam</p>
         ) : (
           chat.map((m) => (
             <p key={m.id} className={`text-xs leading-snug ${m.is_system ? 'text-amber-300/80 italic' : ''}`}>
@@ -81,11 +81,11 @@ export function ChatPanel({ compact = false }: { compact?: boolean }) {
           aria-label="open emoji picker"
           onClick={() => setPickerOpen((v) => !v)}
         >
-          😊
+          -
         </button>
         <input
           className="input !py-1 text-xs"
-          placeholder="message…"
+          placeholder="message..."
           maxLength={500}
           value={body}
           onChange={(e) => setBody(e.target.value)}

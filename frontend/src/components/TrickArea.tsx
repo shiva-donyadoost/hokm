@@ -29,7 +29,7 @@ function positionOf(seat: number, you: number): string {
 }
 
 // Winner-collect target offset: cards drift toward the winner's seat and
-// stack (Â§15). Presentation only â€” the server already decided the winner.
+// stack (-section 15). Presentation only - the server already decided the winner.
 function collectTransform(seat: number, you: number, winner: number): string {
   const base = positionOf(seat, you)
   const rel = (winner - you + 4) % 4
@@ -42,7 +42,7 @@ function collectTransform(seat: number, you: number, winner: number): string {
 }
 
 // TrickArea renders cards currently in the trick, positioned around center.
-// A played card animates in over CardPlayDuration (Â§13).
+// A played card animates in over CardPlayDuration (-section 13).
 export function TrickArea({ trick, you, trump, collecting = false, winnerSeat = -1 }: TrickAreaProps) {
   return (
     <div className="relative flex items-center justify-center min-h-44 min-w-44">

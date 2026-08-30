@@ -1,5 +1,5 @@
-// Card asset resolver + build-time validation (impliment.md Â§34â€“Â§36).
-// One mapping layer: Card â†’ SVG asset. No file paths in components.
+// Card asset resolver + build-time validation (impliment.md -section 34-section 36).
+// One mapping layer: Card - SVG asset. No file paths in components.
 
 const RANK_FILE: Record<number, string> = {
   2: '2', 3: '3', 4: '4', 5: '5', 6: '6', 7: '7', 8: '8', 9: '9',
@@ -20,7 +20,7 @@ export const CARD_ASSET_BASE = '/cards'
 export function cardFaceAsset(card: { suit: string; rank: number }): string {
   const r = RANK_FILE[card.rank]
   const s = SUIT_FILE[card.suit]
-  if (!r || !s) return CARD_BACK_ASSET // unknown card â†’ never broken image
+  if (!r || !s) return CARD_BACK_ASSET // unknown card - never broken image
   return `${CARD_ASSET_BASE}/${r}_of_${s}.svg`
 }
 

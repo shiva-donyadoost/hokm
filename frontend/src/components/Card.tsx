@@ -19,7 +19,7 @@ const SIZES = {
 }
 
 // Card renders the SVG asset for a face-up card. Face data (rank/suit text)
-// is kept in aria-labels for accessibility (§48) — the SVG is the artwork.
+// is kept in aria-labels for accessibility (section 48) - the SVG is the artwork.
 export function Card({ card, size = 'md', disabled, selected, onClick, style, className }: CardProps) {
   const dim = SIZES[size]
   return (
@@ -46,7 +46,7 @@ export function Card({ card, size = 'md', disabled, selected, onClick, style, cl
   )
 }
 
-// CardBack renders the hidden-card asset (§7, §35).
+// CardBack renders the hidden-card asset (section 7, section 35).
 export function CardBack({ size = 'sm', style }: { size?: 'sm' | 'md' | 'lg'; style?: CSSProperties }) {
   const dim = SIZES[size]
   return (

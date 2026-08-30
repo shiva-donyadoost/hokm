@@ -119,19 +119,9 @@ export function rankLabel(r: number): string {
   return RANK_LABEL[r] ?? String(r)
 }
 
-export const SUIT_SYMBOL: Record<Suit, string> = {
-  spades: '♠',
-  hearts: '♥',
-  diamonds: '♦',
-  clubs: '♣',
-}
-
 export const Suits: Suit[] = ['spades', 'hearts', 'diamonds', 'clubs']
 
 export function isRed(s: Suit): boolean {
   return s === 'hearts' || s === 'diamonds'
 }
 
-export function cardLabel(c: Card): string {
-  return rankLabel(c.rank) + SUIT_SYMBOL[c.suit]
-}

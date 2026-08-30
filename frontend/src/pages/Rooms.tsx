@@ -39,7 +39,7 @@ export function Rooms() {
     <div className="min-h-dvh bg-slate-950 p-4 max-w-lg mx-auto">
       <Header title="Rooms" />
 
-      {/* Return-to-game banner: refresh persistence (impliment.md §25) */}
+      {/* Return-to-game banner: refresh persistence (impliment.md section 25) */}
       {lastRoom ? (
         <div className="card mb-4 flex items-center justify-between !py-3">
           <span className="text-sm text-slate-300">You have an active table.</span>
@@ -151,7 +151,7 @@ export function Rooms() {
       <section>
         <h2 className="font-bold mb-2 text-slate-300">Open rooms</h2>
         {rooms.length === 0 ? (
-          <p className="text-slate-500 text-sm">No public rooms yet — create one!</p>
+          <p className="text-slate-500 text-sm">No public rooms yet - create one!</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {rooms.map((r) => (
@@ -159,7 +159,7 @@ export function Rooms() {
                 <div>
                   <p className="font-semibold">{r.name}</p>
                   <p className="text-xs text-slate-400">
-                    {r.members.length}/4 players · code {r.code}
+                    {r.members.length}/4 players - code {r.code}
                   </p>
                 </div>
                 <button

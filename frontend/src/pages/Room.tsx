@@ -45,7 +45,7 @@ export function Room() {
     return (
       <div className="min-h-dvh flex items-center justify-center bg-slate-950">
         <p className="text-slate-400 animate-pulse">
-          {connected ? 'joining room…' : 'connecting…'}
+          {connected ? 'joining room...' : 'connecting...'}
         </p>
       </div>
     )
@@ -85,9 +85,9 @@ export function Room() {
                   <span className="text-sm">
                     {m ? (
                       <>
-                        {m.is_host ? '👑 ' : ''}
+                        {m.is_host ? '- ' : ''}
                         {m.username}
-                        {m.is_ai ? ' 🤖' : ''}
+                        {m.is_ai ? ' -' : ''}
                         {m.is_ai && m.ai_difficulty ? (
                           <span className="text-slate-500"> ({m.ai_difficulty})</span>
                         ) : null}
@@ -211,14 +211,14 @@ export function Room() {
         </button>
       ) : (
         <p className="text-center text-sm text-slate-400">
-          {humans < 4 ? 'waiting for the host to start…' : 'waiting for ready…'}
+          {humans < 4 ? 'waiting for the host to start...' : 'waiting for ready...'}
         </p>
       )}
 
       <ChatPanel />
 
       <p className="text-center text-xs text-slate-600 mt-4">
-        {connected ? '🟢 connected' : '🔴 disconnected'} · share code{' '}
+        {connected ? ' connected' : ' disconnected'} - share code{' '}
         <span className="font-mono text-teal-400">{room.code}</span> to invite
       </p>
     </div>

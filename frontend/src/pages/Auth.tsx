@@ -44,7 +44,7 @@ export function Login() {
         />
         {error ? <p className="text-rose-400 text-sm">{error}</p> : null}
         <button className="btn-primary" disabled={loading}>
-          {loading ? 'Signing in…' : 'Sign in'}
+          {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
       <p className="text-sm text-slate-400 mt-4">
@@ -108,7 +108,7 @@ export function Register() {
         />
         {error ? <p className="text-rose-400 text-sm">{error}</p> : null}
         <button className="btn-primary" disabled={loading}>
-          {loading ? 'Creating…' : 'Create account'}
+          {loading ? 'Creating...' : 'Create account'}
         </button>
       </form>
       <p className="text-sm text-slate-400 mt-4">
@@ -136,7 +136,7 @@ export function AuthShell({
         <h1 className="text-3xl font-black tracking-tight mb-1">
           HOKM<span className="text-teal-400">.</span>
         </h1>
-        <p className="text-slate-400 text-sm mb-6">{title} — {subtitle}</p>
+        <p className="text-slate-400 text-sm mb-6">{title} - {subtitle}</p>
         {children}
       </div>
     </div>
