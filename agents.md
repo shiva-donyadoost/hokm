@@ -201,6 +201,11 @@ below. 7. Commit the fix.
 15. **`noUncheckedIndexedAccess` on tuple construction**: `opp[0]` from a `Suit[]` is `Suit | undefined`, so `suitOrder` failed `tsc` even though the arrays are length-2. Fix: branch on trump and return a `[Suit, Suit, Suit, Suit]` literal. Rule: do not index short arrays to build a fixed tuple; name the four suits explicitly.
 16. **`matchMedia` follows the same ESLint-global rule as rAF (lesson 11)**: the mobile hand layout hook used `window.matchMedia` and needed `matchMedia` in `eslint.config.js` globals. Rule: any new browser API in `src/` is an ESLint global, not only a TypeScript lib type.
 
+### Wave 5 / ADR-0013 (2026-09-01)
+
+17. **Refresh logged the user out because Room treated `user === null` as "go to login"**: `RequireAuth` started with `loading: false` and `Room.tsx` called `navigate('/login')` while `/me` was still in flight. Symptom: F5 on lobby/table dumps you on the login page even with a valid refresh token. Fix: `booting` gate until `ensureFreshAccess` + `/me`; Room never navigates to login while tokens exist. Rule: protected routes must not redirect on a null user until session restore has finished, and a network blip must not clear tokens.
+18. **Mobile drag missed pointer events because capture was on `e.target`**: the inner card `<img>`/`<button>` received the touch, so the wrapper's `onPointerMove`/`onPointerUp` never ran. Combined with a rotated fan, fingers could not drag. Fix: `touch-action: none`, capture on `e.currentTarget`, `pointer-events: none` on the Card, overlapping row with no rotation. Rule: pointer capture belongs on the element that owns the handlers; never assume the event target is that element on touch devices.
+
 ---
 
 ## PROJECT CONVENTIONS

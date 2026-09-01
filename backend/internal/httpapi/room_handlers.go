@@ -36,6 +36,10 @@ func (s *Server) roomErr(err error) error {
 		return apiError(http.StatusConflict, "no_empty_slot", "no empty seat")
 	case errors.Is(err, room.ErrNotAnAI):
 		return apiError(http.StatusUnprocessableEntity, "not_ai", "member is not an AI")
+	case errors.Is(err, room.ErrInvalidSeat):
+		return apiError(http.StatusUnprocessableEntity, "invalid_seat", "seat must be 0-3")
+	case errors.Is(err, room.ErrEmptySeat):
+		return apiError(http.StatusUnprocessableEntity, "empty_seat", "source seat is empty")
 	default:
 		return err
 	}
@@ -253,4 +257,39 @@ func (s *Server) handleRemoveAI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"room": out})
+}
+
+type moveSeatsRequest struct {
+	FromSeat int `json:"from_seat"`
+	ToSeat   int `json:"to_seat"`
+}
+
+func (s *Server) handleMoveSeats(w http.ResponseWriter, r *http.Request) {
+	rm, uid, ok := s.roomFromRequest(w, r, "id")
+	if !ok {
+		return
+	}
+	var req moveSeatsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeError(w, r, apiError(http.StatusBadRequest, "bad_request", "invalid JSON body"))
+		return
+	}
+	out, err := s.rooms.MoveSeat(rm.ID, uid, req.FromSeat, req.ToSeat)
+	if err != nil {
+		writeError(w, r, s.roomErr(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"room": out})
+}
+
+func (s *Server) handleDeleteRoom(w http.ResponseWriter, r *http.Request) {
+	rm, uid, ok := s.roomFromRequest(w, r, "id")
+	if !ok {
+		return
+	}
+	if err := s.rooms.Delete(rm.ID, uid); err != nil {
+		writeError(w, r, s.roomErr(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 }

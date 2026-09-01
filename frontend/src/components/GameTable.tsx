@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Card, CardBack } from './Card'
 import { ChatPanel } from './ChatPanel'
@@ -82,7 +82,14 @@ export function GameTable({ room, view }: GameTableProps) {
   const [reveal, setReveal] = useState<{ number: number; winner: number } | null>(null)
   const [collecting, setCollecting] = useState(false)
   const lastTrickSeen = useRef(0)
-  const drag = useRef<{ card: string | null; startX: number; startY: number; dx: number; dy: number } | null>(null)
+  const drag = useRef<{
+    card: string | null
+    startX: number
+    startY: number
+    dx: number
+    dy: number
+    moved: boolean
+  } | null>(null)
 
   // Unread badge: count others' messages while chat is closed.
   const lastSeenChat = useRef(chat.length)
@@ -98,11 +105,13 @@ export function GameTable({ room, view }: GameTableProps) {
   }, [chat, chatOpen, myId])
 
   // Winner reveal -> collect animation, driven by server trick events.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const lt = view.last_trick
     if (!lt || lt.number === lastTrickSeen.current) return
+    if ((view.current_trick?.length ?? 0) > 0) return
     lastTrickSeen.current = lt.number
     setReveal({ number: lt.number, winner: lt.winner })
+    setCollecting(false)
     const revealMs = animDuration(ANIM.trickWinnerMs)
     const collectMs = animDuration(ANIM.cardCollectionMs)
     const t1 = setTimeout(() => setCollecting(true), revealMs)
@@ -112,7 +121,7 @@ export function GameTable({ room, view }: GameTableProps) {
     }, revealMs + collectMs)
     return () => { clearTimeout(t1); clearTimeout(t2) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view.last_trick?.number])
+  }, [view.last_trick?.number, view.current_trick?.length])
 
   useEffect(() => {
     if (view.phase === 'trump_selection' && view.round_number === 1 && !view.match_over) {
@@ -172,20 +181,25 @@ export function GameTable({ room, view }: GameTableProps) {
     }
   }
 
-  // Drag and drop via pointer events.
+  // Drag and drop via pointer events. Capture on the wrapper so mobile
+  // touches are not stolen by the inner <img>/<button> (ADR-0013).
   const onDragStart = (e: ReactPointerEvent, c: { suit: Suit; rank: number }) => {
-    if (!isLegal(c)) return
-    drag.current = { card: keyOf(c), startX: e.clientX, startY: e.clientY, dx: 0, dy: 0 }
-    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+    if (!trumpPending && !isLegal(c)) return
+    e.currentTarget.setPointerCapture(e.pointerId)
+    drag.current = { card: keyOf(c), startX: e.clientX, startY: e.clientY, dx: 0, dy: 0, moved: false }
   }
   const onDragMove = (e: ReactPointerEvent) => {
     if (!drag.current) return
     drag.current.dx = e.clientX - drag.current.startX
     drag.current.dy = e.clientY - drag.current.startY
+    if (Math.hypot(drag.current.dx, drag.current.dy) > 12) drag.current.moved = true
+    if (!drag.current.moved) return
+    const played = view.your_hand?.find((c) => keyOf(c) === drag.current?.card)
+    if (!played || !isLegal(played)) return
     const el = document.getElementById('card-' + drag.current.card)
     if (el) el.style.transform = `translate(${drag.current.dx}px, ${drag.current.dy - 24}px) scale(1.08)`
   }
-  const onDragEnd = () => {
+  const onDragEnd = (c: { suit: Suit; rank: number }) => {
     const d = drag.current
     if (!d) return
     const el = document.getElementById('card-' + d.card)
@@ -195,11 +209,17 @@ export function GameTable({ room, view }: GameTableProps) {
       el.style.transform = ''
       setTimeout(() => { if (el) el.style.transition = '' }, animDuration(ANIM.cardReturnMs))
     }
-    const played = view.your_hand?.find((c) => keyOf(c) === d.card)
-    if (played && Math.abs(d.dy) > 80 && isLegal(played)) {
-      tryPlay(played) // released toward the table
+    if (trumpPending) {
+      onCardTap(c)
+      return
     }
-    // otherwise: cancelled - card snaps back, no gameplay action
+    const played = view.your_hand?.find((x) => keyOf(x) === d.card)
+    const lift = narrow ? 36 : 64
+    if (played && d.moved && d.dy < -lift && isLegal(played)) {
+      tryPlay(played)
+      return
+    }
+    if (!d.moved) onCardTap(c)
   }
 
   const actingSeat =
@@ -210,7 +230,7 @@ export function GameTable({ room, view }: GameTableProps) {
   const rel = (offset: number) => (view.you + offset) % 4
   const hand = sortHand(view.your_hand ?? [], view.trump)
   const self = memberBySeat(room, view.you)
-  const teamRounds = (seat: number) => view.rounds_won[seat % 2] ?? 0
+  const teamTricks = (seat: number) => view.tricks_this_round[seat % 2] ?? 0
   const seatsOccupied = room.members.length === 4
 
   // Winner reveal overlay for the last completed trick (presentation only).
@@ -273,7 +293,7 @@ export function GameTable({ room, view }: GameTableProps) {
             isTurn={actingSeat === rel(2)}
             isHakem={view.hakem === rel(2)}
             deadline={actingSeat === rel(2) ? actingDeadline : 0}
-            roundsWon={teamRounds(rel(2))}
+            tricks={teamTricks(rel(2))}
             hideHand={narrow}
           />
         </div>
@@ -285,7 +305,7 @@ export function GameTable({ room, view }: GameTableProps) {
             isTurn={actingSeat === rel(1)}
             isHakem={view.hakem === rel(1)}
             deadline={actingSeat === rel(1) ? actingDeadline : 0}
-            roundsWon={teamRounds(rel(1))}
+            tricks={teamTricks(rel(1))}
             hideHand={narrow}
           />
           <div className="flex justify-center relative">
@@ -295,6 +315,7 @@ export function GameTable({ room, view }: GameTableProps) {
               trump={view.trump}
               collecting={collecting}
               winnerSeat={showReveal ? revealWinnerSeat : -1}
+              skipEnter={showReveal}
             />
           </div>
           <SeatPlate
@@ -303,12 +324,12 @@ export function GameTable({ room, view }: GameTableProps) {
             isTurn={actingSeat === rel(3)}
             isHakem={view.hakem === rel(3)}
             deadline={actingSeat === rel(3) ? actingDeadline : 0}
-            roundsWon={teamRounds(rel(3))}
+            tricks={teamTricks(rel(3))}
             hideHand={narrow}
           />
         </div>
 
-        {/* Arc hand with tap/drag interaction */}
+        {/* Overlapping hand: fan on desktop, flat row on mobile (ADR-0013). */}
         <div className="flex flex-col items-center gap-1 pb-2">
           <div
             className={`px-2 py-1 rounded-full text-xs font-semibold max-w-[90vw] truncate
@@ -317,7 +338,7 @@ export function GameTable({ room, view }: GameTableProps) {
           >
             {view.hakem === view.you ? '[H] ' : ''}
             {self ? self.username : 'you'}
-            <span className="ml-1 text-[10px] font-bold opacity-80">{teamRounds(view.you)}</span>
+            <span className="ml-1 text-[10px] font-bold opacity-80">{teamTricks(view.you)}</span>
           </div>
           <div
             className={`text-xs px-2 py-0.5 rounded-full ${
@@ -345,11 +366,11 @@ export function GameTable({ room, view }: GameTableProps) {
               const k = keyOf(c)
               const n = hand.length
               const mid = (n - 1) / 2
-              const fan = n <= 1 ? 0 : Math.min(narrow ? 5 : 8, (narrow ? 28 : 42) / n)
-              const angle = (i - mid) * fan
-              const overlap = n <= 1 ? 0 : Math.min(narrow ? 50 : 42, (narrow ? 30 : 22) + n)
-              const drop = Math.abs(i - mid) * Math.abs(i - mid) * (narrow ? 1.0 : 1.4)
-              const lift = selected === k ? drop - (narrow ? 14 : 22) : drop
+              const fan = n <= 1 ? 0 : Math.min(8, 42 / n)
+              const angle = narrow ? 0 : (i - mid) * fan
+              const overlap = n <= 1 ? 0 : (narrow ? 34 : Math.min(42, 22 + n))
+              const drop = narrow ? 0 : Math.abs(i - mid) * Math.abs(i - mid) * 1.4
+              const lift = selected === k ? drop - (narrow ? 12 : 22) : drop
               const dealDelay = prevHand.current === 5 ? i * ANIM.dealStaggerMs : 0
               const playable = trumpPending || isLegal(c)
               return (
@@ -357,17 +378,19 @@ export function GameTable({ room, view }: GameTableProps) {
                   key={k}
                   id={'card-' + k}
                   data-deal={dealDelay}
-                  className="deal-card"
+                  className="deal-card touch-none"
                   style={{
                     transform: `rotate(${angle}deg) translateY(${lift}px)`,
                     transformOrigin: 'bottom center',
                     marginLeft: i === 0 ? 0 : -overlap,
                     zIndex: selected === k ? 50 : i,
                     animationDelay: `${dealDelay}ms`,
+                    touchAction: 'none',
                   }}
                   onPointerDown={playable ? (e) => onDragStart(e, c) : undefined}
                   onPointerMove={playable ? onDragMove : undefined}
-                  onPointerUp={playable ? onDragEnd : undefined}
+                  onPointerUp={playable ? () => onDragEnd(c) : undefined}
+                  onPointerCancel={playable ? () => { drag.current = null } : undefined}
                 >
                   <Card
                     card={c}
@@ -375,7 +398,7 @@ export function GameTable({ room, view }: GameTableProps) {
                     disabled={!playable}
                     dimmed={view.phase === 'trick_play' && !followsSuit(c)}
                     selected={selected === k}
-                    onClick={() => onCardTap(c)}
+                    style={{ pointerEvents: 'none' }}
                   />
                 </div>
               )
@@ -427,13 +450,13 @@ function useAuth0(): string {
   return useAuth((s) => s.user?.id ?? '')
 }
 
-function SeatPlate({ member, cardCount, isTurn, isHakem, deadline, roundsWon, hideHand }: {
+function SeatPlate({ member, cardCount, isTurn, isHakem, deadline, tricks, hideHand }: {
   member: ReturnType<typeof memberBySeat>
   cardCount: number
   isTurn: boolean
   isHakem: boolean
   deadline: number
-  roundsWon: number
+  tricks: number
   hideHand: boolean
 }) {
   return (
@@ -446,7 +469,7 @@ function SeatPlate({ member, cardCount, isTurn, isHakem, deadline, roundsWon, hi
       >
         {isHakem ? '[H] ' : ''}
         {member ? member.username + (member.is_ai ? ' [AI]' : '') : '...'}
-        <span className="ml-1 text-[10px] font-bold opacity-80">{roundsWon}</span>
+        <span className="ml-1 text-[10px] font-bold opacity-80">{tricks}</span>
       </div>
       {deadline ? <CountdownBar deadlineMs={deadline} label="time to act" /> : null}
       {hideHand ? null : (

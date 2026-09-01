@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getAccessToken } from '../api/client'
+import { ensureFreshAccess, getAccessToken } from '../api/client'
 import {
   Cmd,
   Msg,
@@ -21,7 +21,7 @@ interface GameState {
   view: SeatView | null
   chat: ChatMessage[]
   lastError: string | null
-  connect: (roomId: string) => void
+  connect: (roomId: string) => Promise<void>
   disconnect: () => void
   startGame: () => void
   replayGame: () => void
@@ -44,8 +44,9 @@ export const useGame = create<GameState>((set, get) => ({
   chat: [],
   lastError: null,
 
-  connect: (roomId) => {
+  connect: async (roomId) => {
     get().disconnect()
+    await ensureFreshAccess()
     const token = getAccessToken()
     if (!token) return
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'

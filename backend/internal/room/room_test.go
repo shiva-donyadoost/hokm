@@ -231,3 +231,84 @@ func TestCodesUniqueAcrossManyRooms(t *testing.T) {
 		seen[r.Code] = true
 	}
 }
+
+func seatOf(r Room, userID string) int {
+	for _, m := range r.Members {
+		if m.UserID == userID {
+			return m.Seat
+		}
+	}
+	return -1
+}
+
+func TestMoveSeatSwapAndEmpty(t *testing.T) {
+	m := newTestManager()
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob")
+
+	got, err := m.MoveSeat(r.ID, "u1", 0, 2)
+	if err != nil {
+		t.Fatalf("move to empty: %v", err)
+	}
+	if seatOf(got, "u1") != 2 {
+		t.Fatalf("alice seat = %d, want 2", seatOf(got, "u1"))
+	}
+	if seatOf(got, "u2") != 1 {
+		t.Fatalf("bob seat = %d, want 1", seatOf(got, "u2"))
+	}
+
+	got, err = m.MoveSeat(r.ID, "u1", 2, 1)
+	if err != nil {
+		t.Fatalf("swap: %v", err)
+	}
+	if seatOf(got, "u1") != 1 || seatOf(got, "u2") != 2 {
+		t.Fatalf("after swap alice=%d bob=%d, want 1 and 2", seatOf(got, "u1"), seatOf(got, "u2"))
+	}
+}
+
+func TestMoveSeatRejected(t *testing.T) {
+	m := newTestManager()
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob")
+
+	if _, err := m.MoveSeat(r.ID, "u2", 1, 2); !errors.Is(err, ErrNotHost) {
+		t.Fatalf("non-host: %v", err)
+	}
+	if _, err := m.MoveSeat(r.ID, "u1", -1, 2); !errors.Is(err, ErrInvalidSeat) {
+		t.Fatalf("invalid seat: %v", err)
+	}
+	if _, err := m.MoveSeat(r.ID, "u1", 3, 2); !errors.Is(err, ErrEmptySeat) {
+		t.Fatalf("empty source: %v", err)
+	}
+
+	if err := m.MarkStarted(r.ID); err != nil {
+		t.Fatalf("MarkStarted: %v", err)
+	}
+	if _, err := m.MoveSeat(r.ID, "u1", 0, 2); !errors.Is(err, ErrGameInProgress) {
+		t.Fatalf("in-game move: %v", err)
+	}
+}
+
+func TestDeleteLobbyOnly(t *testing.T) {
+	m := newTestManager()
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob")
+
+	if err := m.Delete(r.ID, "u2"); !errors.Is(err, ErrNotHost) {
+		t.Fatalf("non-host delete: %v", err)
+	}
+	if err := m.Delete(r.ID, "u1"); err != nil {
+		t.Fatalf("delete lobby: %v", err)
+	}
+	if _, err := m.Get(r.ID); !errors.Is(err, ErrRoomNotFound) {
+		t.Fatalf("deleted room still present: %v", err)
+	}
+
+	r2, _ := m.Create("u1", "Alice", "Match", Public, defaultSettings())
+	if err := m.MarkStarted(r2.ID); err != nil {
+		t.Fatalf("MarkStarted: %v", err)
+	}
+	if err := m.Delete(r2.ID, "u1"); !errors.Is(err, ErrGameInProgress) {
+		t.Fatalf("in-game delete: %v", err)
+	}
+}

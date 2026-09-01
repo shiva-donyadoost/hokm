@@ -57,6 +57,8 @@ func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Ma
 	s.mux.Handle("POST /api/rooms/{id}/ai", s.RequireAuth(http.HandlerFunc(s.handleAddAI)))
 	s.mux.Handle("POST /api/rooms/{id}/ai/fill", s.RequireAuth(http.HandlerFunc(s.handleFillAI)))
 	s.mux.Handle("POST /api/rooms/{id}/ai/remove", s.RequireAuth(http.HandlerFunc(s.handleRemoveAI)))
+	s.mux.Handle("POST /api/rooms/{id}/seats", s.RequireAuth(http.HandlerFunc(s.handleMoveSeats)))
+	s.mux.Handle("DELETE /api/rooms/{id}", s.RequireAuth(http.HandlerFunc(s.handleDeleteRoom)))
 
 	// Stats & ranking (Phase 13).
 	s.mux.Handle("GET /api/leaderboard", s.RequireAuth(http.HandlerFunc(s.handleLeaderboard)))

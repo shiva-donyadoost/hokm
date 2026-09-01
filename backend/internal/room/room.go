@@ -29,6 +29,8 @@ var (
 	ErrCodeConflict      = errors.New("room: could not allocate room code")
 	ErrInvalidRoundCount = errors.New("room: invalid round count")
 	ErrInvalidGameSpeed  = errors.New("room: invalid game speed")
+	ErrInvalidSeat       = errors.New("room: invalid seat")
+	ErrEmptySeat         = errors.New("room: source seat is empty")
 )
 
 // RoomSettings carries creator-chosen match configuration.
@@ -494,6 +496,69 @@ func (m *Manager) MarkStarted(roomID string) error {
 	}
 	r.Status = "in_game"
 	m.notify(r)
+	return nil
+}
+
+// MoveSeat lets the host move whoever occupies fromSeat onto toSeat
+// (swap if occupied, slide if empty). Lobby only (ADR-0013).
+func (m *Manager) MoveSeat(roomID, hostID string, fromSeat, toSeat int) (Room, error) {
+	if fromSeat < 0 || fromSeat > 3 || toSeat < 0 || toSeat > 3 {
+		return Room{}, ErrInvalidSeat
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.rooms[roomID]
+	if !ok {
+		return Room{}, ErrRoomNotFound
+	}
+	if r.HostID != hostID {
+		return Room{}, ErrNotHost
+	}
+	if r.Status != "lobby" {
+		return Room{}, ErrGameInProgress
+	}
+	if fromSeat == toSeat {
+		return r.clone(), nil
+	}
+	var src, dst *Member
+	for i := range r.Members {
+		if r.Members[i].Seat == fromSeat {
+			src = &r.Members[i]
+		}
+		if r.Members[i].Seat == toSeat {
+			dst = &r.Members[i]
+		}
+	}
+	if src == nil {
+		return Room{}, ErrEmptySeat
+	}
+	if dst == nil {
+		src.Seat = toSeat
+	} else {
+		src.Seat, dst.Seat = toSeat, fromSeat
+	}
+	m.notify(r)
+	return r.clone(), nil
+}
+
+// Delete removes a lobby room. Host only; in-game rooms are rejected.
+func (m *Manager) Delete(roomID, hostID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.rooms[roomID]
+	if !ok {
+		return ErrRoomNotFound
+	}
+	if r.HostID != hostID {
+		return ErrNotHost
+	}
+	if r.Status != "lobby" {
+		return ErrGameInProgress
+	}
+	r.Status = "closed"
+	m.notify(r)
+	delete(m.rooms, r.ID)
+	delete(m.byCode, r.Code)
 	return nil
 }
 

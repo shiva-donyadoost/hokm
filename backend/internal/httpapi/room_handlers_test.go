@@ -145,3 +145,82 @@ func TestRoomHTTPFlow(t *testing.T) {
 		t.Fatalf("unauth list: %d, want 401", w.Code)
 	}
 }
+
+func TestMoveSeatsAndDeleteRoomHTTP(t *testing.T) {
+	s := newTestServer(t)
+	_, tokA := registerUser(t, s, "hostmove")
+	_, tokB := registerUser(t, s, "guestmove")
+
+	rec := authedRequest(t, s, http.MethodPost, "/api/rooms", tokA,
+		map[string]string{"name": "Seat Lab", "visibility": "public"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	var created struct {
+		Room struct {
+			ID string `json:"id"`
+		} `json:"room"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &created)
+	id := created.Room.ID
+
+	rec = authedRequest(t, s, http.MethodGet, "/api/rooms/"+id, tokA, nil)
+	var snap struct {
+		Room struct {
+			Code string `json:"code"`
+		} `json:"room"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &snap)
+
+	rec = authedRequest(t, s, http.MethodPost, "/api/rooms/join", tokB,
+		map[string]string{"code": snap.Room.Code})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("join: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = authedRequest(t, s, http.MethodPost, "/api/rooms/"+id+"/seats", tokB,
+		map[string]int{"from_seat": 1, "to_seat": 2})
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guest move: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = authedRequest(t, s, http.MethodPost, "/api/rooms/"+id+"/seats", tokA,
+		map[string]int{"from_seat": 0, "to_seat": 2})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("host move: %d %s", rec.Code, rec.Body.String())
+	}
+	var moved struct {
+		Room struct {
+			Members []struct {
+				Username string `json:"username"`
+				Seat     int    `json:"seat"`
+			} `json:"members"`
+		} `json:"room"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &moved)
+	aliceSeat, bobSeat := -1, -1
+	for _, mem := range moved.Room.Members {
+		switch mem.Username {
+		case "hostmove":
+			aliceSeat = mem.Seat
+		case "guestmove":
+			bobSeat = mem.Seat
+		}
+	}
+	if aliceSeat != 2 || bobSeat != 1 {
+		t.Fatalf("seats host=%d guest=%d, want 2 and 1", aliceSeat, bobSeat)
+	}
+
+	rec = authedRequest(t, s, http.MethodDelete, "/api/rooms/"+id, tokB, nil)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("guest delete: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = authedRequest(t, s, http.MethodDelete, "/api/rooms/"+id, tokA, nil)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("host delete: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = authedRequest(t, s, http.MethodGet, "/api/rooms/"+id, tokA, nil)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("deleted get: %d, want 404", rec.Code)
+	}
+}

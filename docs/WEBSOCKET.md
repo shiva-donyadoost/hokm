@@ -30,7 +30,7 @@ upgrade; session bound to the user for its lifetime).
 |---|---|
 | `STATE` | full per-seat `SeatView` (own hand in full, others as counts) |
 | `EVENTS` | one public event per message (`name`): `hakem_selected`, `trump_selected`, `card_played`, `trick_completed`, `round_completed`, `game_completed`, `next_round_started` |
-| `ROOM` | lobby snapshot after any room mutation |
+| `ROOM` | lobby snapshot after any room mutation; `status: closed` means the host deleted the lobby (ADR-0013) |
 | `CHAT` | `{id, room_id, user_id, username, body, is_system, at}` — player-typed only; the server does not emit system/timeout/join lines (ADR-0012) |
 | `ERROR` | rejected command reason |
 | `PONG` | heartbeat reply |

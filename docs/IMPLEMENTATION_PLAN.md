@@ -5,6 +5,19 @@ Rules: phases are executed strictly in order; each phase is implemented,
 tested, linted, documented, committed (Conventional Commits), and marked
 complete before the next begins. See `agents.md` HARD RULES.
 
+## Enhancement Wave 5 — Session Restore, Lobby Teams, Hand & Collect
+
+Source: ADR-0013 (2026-09-01).
+
+| # | Phase | Scope | Status |
+|---|-------|-------|--------|
+| X | Session restore | refresh must not log out; boot `/me` (refresh JWT first); stay on lobby/table URL | done |
+| Y | Mobile hand + drag | overlapping row (no rotation); pointer capture on wrapper; drag-to-play and tap-to-play | done |
+| Z | Lobby teams + seats | Team A (0+2) / Team B (1+3); host moves any occupant on desktop and mobile | done |
+| AA | Seat score | number by each name is tricks this round; top bar still shows match rounds | done |
+| AB | Collect from felt | last-trick cards stay at rest, then travel to the winner; no remount from origin | done |
+| AC | Delete lobby | host `DELETE /api/rooms/{id}` lobby only, with confirm | done |
+
 ## Enhancement Wave 4 — Table Rules, Stats Fix, Session & Chat
 
 Source: ADR-0012 (2026-09-01).

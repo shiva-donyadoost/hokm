@@ -40,6 +40,8 @@ client should POST `/api/auth/refresh`.
 | POST | `/api/rooms/{id}/ai` | `{difficulty}` | host only; easy/medium/hard/expert/pro; AI auto-ready |
 | POST | `/api/rooms/{id}/ai/fill` | — | host only; fill every empty seat with a random-difficulty AI |
 | POST | `/api/rooms/{id}/ai/remove` | `{user_id}` | host only |
+| POST | `/api/rooms/{id}/seats` | `{from_seat, to_seat}` | host, lobby only; swap or move onto an empty seat (0–3) |
+| DELETE | `/api/rooms/{id}` | — | host, lobby only; notifies `status: closed` then removes the room |
 
 ## Stats
 

@@ -9,6 +9,7 @@ interface TrickAreaProps {
   trump?: string
   collecting?: boolean
   winnerSeat?: number
+  skipEnter?: boolean
 }
 
 function relOf(seat: number, you: number): number {
@@ -54,22 +55,25 @@ function FlyingCard({
   collecting,
   winnerSeat,
   idx,
+  skipEnter,
 }: {
   pc: PlayedCard
   you: number
   collecting: boolean
   winnerSeat: number
   idx: number
+  skipEnter: boolean
 }) {
   const rest = restTransform(pc.seat, you)
   const origin = originTransform(pc.seat, you)
   const collect = collectTransform(you, winnerSeat, idx)
-  const [transform, setTransform] = useState(origin)
+  const [transform, setTransform] = useState(skipEnter ? rest : origin)
 
   useEffect(() => {
+    if (skipEnter) return
     const id = requestAnimationFrame(() => setTransform(rest))
     return () => cancelAnimationFrame(id)
-  }, [rest])
+  }, [rest, skipEnter])
 
   useEffect(() => {
     if (collecting && winnerSeat >= 0) {
@@ -92,7 +96,7 @@ function FlyingCard({
   )
 }
 
-export function TrickArea({ trick, you, collecting = false, winnerSeat = -1 }: TrickAreaProps) {
+export function TrickArea({ trick, you, collecting = false, winnerSeat = -1, skipEnter = false }: TrickAreaProps) {
   return (
     <div className="relative flex items-center justify-center min-h-44 min-w-44">
       <div className="absolute inset-0 rounded-full bg-table-700/40 border border-table-600/60" />
@@ -104,6 +108,7 @@ export function TrickArea({ trick, you, collecting = false, winnerSeat = -1 }: T
           collecting={collecting}
           winnerSeat={winnerSeat}
           idx={idx}
+          skipEnter={skipEnter}
         />
       ))}
     </div>

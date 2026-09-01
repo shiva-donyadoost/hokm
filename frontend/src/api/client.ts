@@ -26,6 +26,34 @@ export function getAccessToken(): string | null {
   return accessToken
 }
 
+function jwtExpMs(token: string): number | null {
+  const parts = token.split('.')
+  const payload = parts[1]
+  if (!payload) return null
+  try {
+    let b64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    while (b64.length % 4) b64 += '='
+    const json = JSON.parse(atob(b64)) as { exp?: number }
+    return typeof json.exp === 'number' ? json.exp * 1000 : null
+  } catch {
+    return null
+  }
+}
+
+/** Refresh the access JWT if it is missing or within 5s of expiry. */
+export async function ensureFreshAccess(): Promise<boolean> {
+  if (accessToken) {
+    const exp = jwtExpMs(accessToken)
+    if (exp !== null && exp > Date.now() + 5000) return true
+  }
+  if (!refreshToken) return Boolean(accessToken)
+  return refreshTokens()
+}
+
+export function hasSessionTokens(): boolean {
+  return Boolean(accessToken || refreshToken || localStorage.getItem('hokm.access') || localStorage.getItem('hokm.refresh'))
+}
+
 export interface User {
   id: string
   username: string
@@ -141,6 +169,9 @@ export const api = {
     request<{ room: Room }>('POST', `/rooms/${id}/ai/fill`, {}),
   removeAI: (id: string, user_id: string) =>
     request<{ room: Room }>('POST', `/rooms/${id}/ai/remove`, { user_id }),
+  moveSeats: (id: string, from_seat: number, to_seat: number) =>
+    request<{ room: Room }>('POST', `/rooms/${id}/seats`, { from_seat, to_seat }),
+  deleteRoom: (id: string) => request<{ status: string }>('DELETE', `/rooms/${id}`),
   myStats: () => request<{ stats: StatsEntry }>('GET', '/stats'),
   leaderboard: () => request<{ entries: StatsEntry[] }>('GET', '/leaderboard'),
 }
