@@ -349,10 +349,10 @@ func TestFullMultiplayerGameOverWS(t *testing.T) {
 		}, 10*time.Second)
 	}
 
-	// Drive all 13 tricks with the shared safe driver.
+	// Drive tricks until a team reaches 7 (ADR-0012).
 	final := driveGame(t, clients, roomID, 60*time.Second)
-	if final.LastTrick == nil || final.LastTrick.Number != 13 {
-		t.Fatalf("last trick = %+v, want #13", final.LastTrick)
+	if final.LastTrick == nil || final.LastTrick.Number < 7 || final.LastTrick.Number > 13 {
+		t.Fatalf("last trick = %+v, want number 7-13", final.LastTrick)
 	}
 
 	// Everyone must agree the match is over with a consistent result.

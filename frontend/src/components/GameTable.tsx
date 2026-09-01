@@ -7,7 +7,9 @@ import { useGame } from '../state/game'
 import { useAuth } from '../state/auth'
 import { ANIM, animDuration } from '../config'
 import {
-  Suits,
+  SUIT_GLYPH,
+  isRed,
+  sortHand,
   type RoundResult,
   type Room,
   type SeatView,
@@ -26,32 +28,52 @@ function memberBySeat(room: Room, seat: number) {
 // Countdown bar (impliment.md section 9): renders from the authoritative
 // server deadline; recalculated locally - no per-second server traffic.
 function CountdownBar({ deadlineMs, label }: { deadlineMs: number; label: string }) {
+  const totalRef = useRef(Math.max(1, deadlineMs - Date.now()))
   const [remaining, setRemaining] = useState(() => Math.max(0, deadlineMs - Date.now()))
   useEffect(() => {
+    totalRef.current = Math.max(1, deadlineMs - Date.now())
+    setRemaining(Math.max(0, deadlineMs - Date.now()))
     const id = setInterval(() => setRemaining(Math.max(0, deadlineMs - Date.now())), 100)
     return () => clearInterval(id)
   }, [deadlineMs])
-  const pct = Math.min(100, Math.max(0, (remaining / 10000) * 100))
+  const pct = Math.min(100, Math.max(0, ((totalRef.current - remaining) / totalRef.current) * 100))
+  const urgent = pct > 70
   return (
     <div
-      className="w-full h-1.5 bg-slate-700 rounded-full overflow-hidden mt-0.5"
+      className="w-full h-2 bg-slate-700 rounded-full overflow-hidden mt-0.5"
       role="timer"
       aria-label={`${label}: ${Math.ceil(remaining / 1000)} seconds remaining`}
     >
       <div
-        className="h-full bg-amber-400 transition-[width] duration-100 ease-linear"
+        className={`h-full transition-[width] duration-100 ease-linear ${urgent ? 'bg-rose-400' : 'bg-amber-400'}`}
         style={{ width: `${pct}%` }}
       />
     </div>
   )
 }
 
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 639px)').matches,
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 639px)')
+    const onChange = () => setNarrow(mq.matches)
+    onChange()
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return narrow
+}
+
 export function GameTable({ room, view }: GameTableProps) {
   const playCard = useGame((s) => s.playCard)
   const selectTrump = useGame((s) => s.selectTrump)
+  const replayGame = useGame((s) => s.replayGame)
   const lastError = useGame((s) => s.lastError)
   const chat = useGame((s) => s.chat)
   const myId = useAuth0()
+  const narrow = useNarrow()
 
   const [selected, setSelected] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
@@ -70,7 +92,7 @@ export function GameTable({ room, view }: GameTableProps) {
       lastSeenChat.current = chat.length
       return
     }
-    const newOnes = chat.slice(lastSeenChat.current).filter((m) => m.user_id !== myId)
+    const newOnes = chat.slice(lastSeenChat.current).filter((m) => m.user_id !== myId && !m.is_system)
     if (newOnes.length > 0) setUnread((u) => u + newOnes.length)
     lastSeenChat.current = chat.length
   }, [chat, chatOpen, myId])
@@ -92,6 +114,14 @@ export function GameTable({ room, view }: GameTableProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view.last_trick?.number])
 
+  useEffect(() => {
+    if (view.phase === 'trump_selection' && view.round_number === 1 && !view.match_over) {
+      lastTrickSeen.current = 0
+      setReveal(null)
+      setCollecting(false)
+    }
+  }, [view.phase, view.round_number, view.match_over])
+
   // Dealing animation trigger: hand size jumps from 0 to the initial deal.
   const handLen = view.your_hand?.length ?? 0
   const prevHand = useRef(0)
@@ -100,7 +130,7 @@ export function GameTable({ room, view }: GameTableProps) {
     prevHand.current = handLen
   }, [handLen])
 
-  const legalSuits = useMemo(() => {
+  const leadSuit = useMemo(() => {
     const trick = view.current_trick
     if (!trick || trick.length === 0 || !view.your_hand) return null
     const first = trick[0]
@@ -114,8 +144,8 @@ export function GameTable({ room, view }: GameTableProps) {
     view.phase === 'trick_play' && view.turn === view.you &&
     (view.current_trick?.length ?? 0) < 4 && !view.match_over
 
-  const isLegal = (c: { suit: Suit }) =>
-    myTurn && (legalSuits === null || c.suit === legalSuits)
+  const followsSuit = (c: { suit: Suit }) => leadSuit === null || c.suit === leadSuit
+  const isLegal = (c: { suit: Suit }) => myTurn && followsSuit(c)
 
   const keyOf = (c: { suit: Suit; rank: number }) => c.suit + c.rank
 
@@ -125,12 +155,20 @@ export function GameTable({ room, view }: GameTableProps) {
     setSelected(null)
   }
 
+  const trumpPending =
+    view.phase === 'trump_selection' && view.hakem === view.you && !view.trump
+
   const onCardTap = (c: { suit: Suit; rank: number }) => {
+    if (trumpPending) {
+      selectTrump(c.suit)
+      return
+    }
+    if (!isLegal(c)) return
     const k = keyOf(c)
     if (selected === k) {
-      tryPlay(c) // second tap: submit
+      tryPlay(c)
     } else {
-      setSelected(k) // first tap: select/highlight
+      setSelected(k)
     }
   }
 
@@ -164,19 +202,16 @@ export function GameTable({ room, view }: GameTableProps) {
     // otherwise: cancelled - card snaps back, no gameplay action
   }
 
-  const trumpPending =
-    view.phase === 'trump_selection' && view.hakem === view.you && !view.trump
-
-  // Server-authoritative deadlines.
-  const hakemDeadline =
-    view.phase === 'trump_selection' && view.deadline_kind === 'trump'
-      ? (view.deadline_unix_ms ?? 0) : 0
-  const myCardDeadline =
-    myTurn && view.deadline_kind === 'card' ? (view.deadline_unix_ms ?? 0) : 0
-  const activeDeadline = hakemDeadline || myCardDeadline
+  const actingSeat =
+    view.deadline_kind === 'trump' ? view.hakem :
+    view.deadline_kind === 'card' ? view.turn : -1
+  const actingDeadline = actingSeat >= 0 ? (view.deadline_unix_ms ?? 0) : 0
 
   const rel = (offset: number) => (view.you + offset) % 4
-  const hand = view.your_hand ?? []
+  const hand = sortHand(view.your_hand ?? [], view.trump)
+  const self = memberBySeat(room, view.you)
+  const teamRounds = (seat: number) => view.rounds_won[seat % 2] ?? 0
+  const seatsOccupied = room.members.length === 4
 
   // Winner reveal overlay for the last completed trick (presentation only).
   const showReveal = reveal !== null && view.last_trick !== null &&
@@ -184,7 +219,7 @@ export function GameTable({ room, view }: GameTableProps) {
   const revealWinnerSeat = reveal?.winner ?? -1
 
   return (
-    <div className="flex flex-col min-h-dvh bg-gradient-to-b from-table-900 via-table-800 to-table-900">
+    <div className="flex flex-col min-h-dvh bg-gradient-to-b from-table-900 via-table-800 to-table-900 overflow-x-hidden">
       {/* Score bar */}
       <div className="flex items-center justify-between px-3 py-2 text-xs sm:text-sm">
         <div className="flex gap-3">
@@ -198,11 +233,7 @@ export function GameTable({ room, view }: GameTableProps) {
         </div>
         <div className="flex items-center gap-2">
           <span className="text-slate-400">round {view.round_number}/{room.round_count}</span>
-          {view.trump ? (
-            <span className="px-2 py-0.5 rounded-full bg-amber-400/20 text-amber-300 uppercase" aria-label={'trump is ' + view.trump}>
-              trump: {view.trump}
-            </span>
-          ) : null}
+          {view.trump ? <TrumpMark suit={view.trump} /> : null}
         </div>
       </div>
 
@@ -239,9 +270,11 @@ export function GameTable({ room, view }: GameTableProps) {
           <SeatPlate
             member={memberBySeat(room, rel(2))}
             cardCount={view.hand_counts[rel(2)] ?? 0}
-            isTurn={view.turn === rel(2)}
+            isTurn={actingSeat === rel(2)}
             isHakem={view.hakem === rel(2)}
-            deadline={view.turn === rel(2) ? activeDeadline : 0}
+            deadline={actingSeat === rel(2) ? actingDeadline : 0}
+            roundsWon={teamRounds(rel(2))}
+            hideHand={narrow}
           />
         </div>
 
@@ -249,18 +282,13 @@ export function GameTable({ room, view }: GameTableProps) {
           <SeatPlate
             member={memberBySeat(room, rel(1))}
             cardCount={view.hand_counts[rel(1)] ?? 0}
-            isTurn={view.turn === rel(1)}
+            isTurn={actingSeat === rel(1)}
             isHakem={view.hakem === rel(1)}
-            deadline={view.turn === rel(1) ? activeDeadline : 0}
+            deadline={actingSeat === rel(1) ? actingDeadline : 0}
+            roundsWon={teamRounds(rel(1))}
+            hideHand={narrow}
           />
           <div className="flex justify-center relative">
-            {showReveal ? (
-              <div
-                className={`absolute inset-0 rounded-xl ring-2 transition-all duration-300 pointer-events-none
-                  ${collecting ? 'opacity-0' : 'ring-amber-300/90 bg-amber-300/10'}`}
-                aria-label={'trick won by ' + (memberBySeat(room, revealWinnerSeat)?.username ?? 'player')}
-              />
-            ) : null}
             <TrickArea
               trick={view.last_trick && showReveal ? view.last_trick.cards : (view.current_trick ?? [])}
               you={view.you}
@@ -272,28 +300,58 @@ export function GameTable({ room, view }: GameTableProps) {
           <SeatPlate
             member={memberBySeat(room, rel(3))}
             cardCount={view.hand_counts[rel(3)] ?? 0}
-            isTurn={view.turn === rel(3)}
+            isTurn={actingSeat === rel(3)}
             isHakem={view.hakem === rel(3)}
-            deadline={view.turn === rel(3) ? activeDeadline : 0}
+            deadline={actingSeat === rel(3) ? actingDeadline : 0}
+            roundsWon={teamRounds(rel(3))}
+            hideHand={narrow}
           />
         </div>
 
         {/* Arc hand with tap/drag interaction */}
         <div className="flex flex-col items-center gap-1 pb-2">
           <div
+            className={`px-2 py-1 rounded-full text-xs font-semibold max-w-[90vw] truncate
+              ${actingSeat === view.you ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-200'}
+              ${view.hakem === view.you ? 'ring-2 ring-amber-300' : ''}`}
+          >
+            {view.hakem === view.you ? '[H] ' : ''}
+            {self ? self.username : 'you'}
+            <span className="ml-1 text-[10px] font-bold opacity-80">{teamRounds(view.you)}</span>
+          </div>
+          <div
             className={`text-xs px-2 py-0.5 rounded-full ${
-              myTurn ? 'bg-amber-400 text-slate-900 font-bold' : 'bg-slate-800 text-slate-400'
+              trumpPending || myTurn ? 'bg-amber-400 text-slate-900 font-bold' : 'bg-slate-800 text-slate-400'
             }`}
           >
-            {myTurn ? (selected ? 'tap again to play' : 'your turn') : view.turn === -1 ? 'resolving...' : 'waiting'}
+            {trumpPending
+              ? 'tap a card to choose trump'
+              : myTurn
+                ? (selected ? 'tap again to play' : 'your turn')
+                : view.turn === -1 ? 'resolving...' : 'waiting'}
           </div>
-          <div className="flex items-end justify-center h-28 sm:h-32" key={dealKey}>
+          {actingSeat === view.you && actingDeadline ? (
+            <div className="w-48">
+              <CountdownBar deadlineMs={actingDeadline} label="your time" />
+            </div>
+          ) : null}
+          <div
+            className={`relative flex items-end justify-center w-full max-w-full sm:max-w-md px-1 ${
+              narrow ? 'h-28' : 'h-32 sm:h-36'
+            }`}
+            key={dealKey}
+          >
             {hand.map((c, i) => {
               const k = keyOf(c)
-              const center = (hand.length - 1) / 2
-              const angle = (i - center) * 7
-              const lift = selected === k ? -26 : Math.abs(i - center) * 2
+              const n = hand.length
+              const mid = (n - 1) / 2
+              const fan = n <= 1 ? 0 : Math.min(narrow ? 5 : 8, (narrow ? 28 : 42) / n)
+              const angle = (i - mid) * fan
+              const overlap = n <= 1 ? 0 : Math.min(narrow ? 50 : 42, (narrow ? 30 : 22) + n)
+              const drop = Math.abs(i - mid) * Math.abs(i - mid) * (narrow ? 1.0 : 1.4)
+              const lift = selected === k ? drop - (narrow ? 14 : 22) : drop
               const dealDelay = prevHand.current === 5 ? i * ANIM.dealStaggerMs : 0
+              const playable = trumpPending || isLegal(c)
               return (
                 <div
                   key={k}
@@ -303,18 +361,19 @@ export function GameTable({ room, view }: GameTableProps) {
                   style={{
                     transform: `rotate(${angle}deg) translateY(${lift}px)`,
                     transformOrigin: 'bottom center',
-                    margin: hand.length > 9 ? '-10px' : '-4px',
-                    zIndex: i,
+                    marginLeft: i === 0 ? 0 : -overlap,
+                    zIndex: selected === k ? 50 : i,
                     animationDelay: `${dealDelay}ms`,
                   }}
-                  onPointerDown={(e) => onDragStart(e, c)}
-                  onPointerMove={onDragMove}
-                  onPointerUp={onDragEnd}
+                  onPointerDown={playable ? (e) => onDragStart(e, c) : undefined}
+                  onPointerMove={playable ? onDragMove : undefined}
+                  onPointerUp={playable ? onDragEnd : undefined}
                 >
                   <Card
                     card={c}
-                    size="lg"
-                    disabled={!myTurn || !isLegal(c)}
+                    size={narrow ? 'md' : 'lg'}
+                    disabled={!playable}
+                    dimmed={view.phase === 'trick_play' && !followsSuit(c)}
                     selected={selected === k}
                     onClick={() => onCardTap(c)}
                   />
@@ -344,26 +403,14 @@ export function GameTable({ room, view }: GameTableProps) {
         </>
       ) : null}
 
-      {trumpPending ? (
-        <div className="fixed inset-x-0 bottom-0 p-4 bg-slate-900/95 border-t border-amber-400/40">
-          <p className="text-center text-sm text-amber-300 mb-2">
-            You are the Hakem - choose trump
-          </p>
-          <div className="flex justify-center gap-2">
-            {Suits.map((s: Suit) => (
-              <button
-                key={s}
-                onClick={() => selectTrump(s)}
-                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 capitalize"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </div>
+      {view.match_over ? (
+        <MatchOverOverlay
+          view={view}
+          isHost={room.host_id === myId}
+          seatsOccupied={seatsOccupied}
+          onReplay={replayGame}
+        />
       ) : null}
-
-      {view.match_over ? <MatchOverOverlay view={view} /> : null}
 
       {lastError ? (
         <div className="fixed top-12 inset-x-0 flex justify-center pointer-events-none">
@@ -380,12 +427,14 @@ function useAuth0(): string {
   return useAuth((s) => s.user?.id ?? '')
 }
 
-function SeatPlate({ member, cardCount, isTurn, isHakem, deadline }: {
+function SeatPlate({ member, cardCount, isTurn, isHakem, deadline, roundsWon, hideHand }: {
   member: ReturnType<typeof memberBySeat>
   cardCount: number
   isTurn: boolean
   isHakem: boolean
   deadline: number
+  roundsWon: number
+  hideHand: boolean
 }) {
   return (
     <div className="flex flex-col gap-1 items-center max-w-24 sm:max-w-36">
@@ -397,16 +446,42 @@ function SeatPlate({ member, cardCount, isTurn, isHakem, deadline }: {
       >
         {isHakem ? '[H] ' : ''}
         {member ? member.username + (member.is_ai ? ' [AI]' : '') : '...'}
+        <span className="ml-1 text-[10px] font-bold opacity-80">{roundsWon}</span>
       </div>
-      {isTurn && deadline ? <CountdownBar deadlineMs={deadline} label="time to act" /> : null}
-      <div className="flex gap-0.5">
-        {member ? Array.from({ length: Math.min(cardCount, 8) }).map((_, i) => <CardBack key={i} size="sm" />) : null}
-      </div>
+      {deadline ? <CountdownBar deadlineMs={deadline} label="time to act" /> : null}
+      {hideHand ? null : (
+        <div className="flex gap-0.5">
+          {member ? Array.from({ length: Math.min(cardCount, 8) }).map((_, i) => <CardBack key={i} size="sm" />) : null}
+        </div>
+      )}
     </div>
   )
 }
 
-function MatchOverOverlay({ view }: { view: SeatView }) {
+function TrumpMark({ suit }: { suit: Suit }) {
+  return (
+    <span
+      className={`px-2 py-0.5 rounded-full bg-slate-800 text-xl leading-none ${
+        isRed(suit) ? 'text-rose-400' : 'text-slate-100'
+      }`}
+      aria-label={'trump is ' + suit}
+    >
+      {SUIT_GLYPH[suit]}
+    </span>
+  )
+}
+
+function MatchOverOverlay({
+  view,
+  isHost,
+  seatsOccupied,
+  onReplay,
+}: {
+  view: SeatView
+  isHost: boolean
+  seatsOccupied: boolean
+  onReplay: () => void
+}) {
   const myTeam = view.you % 2
   const winner = view.rounds_won[0] > view.rounds_won[1] ? 0 : 1
   const won = winner === myTeam
@@ -419,9 +494,20 @@ function MatchOverOverlay({ view }: { view: SeatView }) {
         <p className="text-slate-300 mb-4">
           Team A {view.rounds_won[0]} - {view.rounds_won[1]} Team B
         </p>
-        <a href="/rooms" className="inline-block px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 font-semibold">
-          Back to rooms
-        </a>
+        <div className="flex flex-col gap-2">
+          {isHost ? (
+            <button className="btn-primary w-full" onClick={onReplay}>
+              Replay
+            </button>
+          ) : (
+            <p className="text-sm text-slate-400">waiting for host to replay...</p>
+          )}
+          {seatsOccupied ? (
+            <a href="/rooms" className="inline-block px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 font-semibold">
+              Back to rooms
+            </a>
+          ) : null}
+        </div>
       </div>
     </div>
   )

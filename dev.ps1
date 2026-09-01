@@ -51,6 +51,37 @@ if (-not (Test-Path ".env")) {
     Info "created .env from .env.example (dev defaults)"
 }
 
+function Test-HostPortBindable([int]$Port) {
+    $listener = $null
+    try {
+        $listener = New-Object System.Net.Sockets.TcpListener ([System.Net.IPAddress]::Any, $Port)
+        $listener.Start()
+        return $true
+    } catch {
+        return $false
+    } finally {
+        if ($null -ne $listener) {
+            try { $listener.Stop() } catch { }
+        }
+    }
+}
+
+function Select-BackendHostPort {
+    $candidates = @(8080, 18080, 28080, 8000)
+    foreach ($p in $candidates) {
+        if (Test-HostPortBindable $p) { return $p }
+    }
+    Warn "no bindable backend host port among: $($candidates -join ', ')"
+    Warn "check: netsh interface ipv4 show excludedportrange protocol=tcp"
+    exit 1
+}
+
+$backendHostPort = Select-BackendHostPort
+$env:BACKEND_HOST_PORT = "$backendHostPort"
+if ($backendHostPort -ne 8080) {
+    Warn "host port 8080 is reserved/in use; publishing backend on localhost:$backendHostPort"
+}
+
 Info "starting postgres + redis..."
 Compose -ComposeArgs @("up", "-d", "postgres", "redis")
 
@@ -62,16 +93,17 @@ Compose -ComposeArgs @("up", "-d", "frontend")
 
 Info "waiting for backend health..."
 $healthy = $false
+$healthUrl = "http://localhost:$backendHostPort/api/health"
 for ($i = 0; $i -lt 60; $i++) {
     try {
-        $resp = Invoke-RestMethod -Uri "http://localhost:8080/api/health" -TimeoutSec 2
+        $resp = Invoke-RestMethod -Uri $healthUrl -TimeoutSec 2
         if ($resp.status -eq "ok") { $healthy = $true; break }
     } catch {
         Start-Sleep -Seconds 2
     }
 }
 if ($healthy) {
-    Ok "backend healthy on http://localhost:8080"
+    Ok "backend healthy on http://localhost:$backendHostPort"
 } else {
     Warn "backend not healthy yet - check: docker compose logs backend"
 }

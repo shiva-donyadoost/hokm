@@ -2,6 +2,7 @@ package rating
 
 import (
 	"math"
+	"sort"
 	"sync"
 	"time"
 )
@@ -30,7 +31,7 @@ type MatchPlayer struct {
 type ScoreStore interface {
 	// ApplyMatch atomically records a match and updates stats/ratings.
 	ApplyMatch(rec MatchRecord) error
-	// Leaderboard returns the top n users by rating.
+	// Leaderboard returns the top n users by wins, then rating, then username.
 	Leaderboard(n int) ([]Entry, error)
 	// StatsOf returns the stats entry for a user.
 	StatsOf(userID string) (Entry, error)
@@ -121,17 +122,16 @@ func (m *MemoryStore) Leaderboard(n int) ([]Entry, error) {
 	for _, e := range m.entries {
 		out = append(out, *e)
 	}
-	// Sort by rating desc, then wins desc.
-	for i := 1; i < len(out); i++ {
-		for j := i; j > 0; j-- {
-			a, b := out[j-1], out[j]
-			if b.Rating > a.Rating || (b.Rating == a.Rating && b.Wins > a.Wins) {
-				out[j-1], out[j] = b, a
-			} else {
-				break
-			}
+	sort.Slice(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Wins != b.Wins {
+			return a.Wins > b.Wins
 		}
-	}
+		if a.Rating != b.Rating {
+			return a.Rating > b.Rating
+		}
+		return a.Username < b.Username
+	})
 	if n > len(out) {
 		n = len(out)
 	}

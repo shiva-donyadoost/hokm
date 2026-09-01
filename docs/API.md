@@ -6,8 +6,9 @@ Base path `/api`. JSON bodies. Errors use a stable envelope:
 { "code": "not_your_turn", "message": "it is not your turn" }
 ```
 
-Authentication: `Authorization: Bearer <access_token>` (JWT, 15 min
-default). On `401 token_expired` the client should POST `/api/auth/refresh`.
+Authentication: `Authorization: Bearer <access_token>` (JWT, **30 days**
+default / `JWT_ACCESS_TTL=720h`, ADR-0012). On `401 token_expired` the
+client should POST `/api/auth/refresh`.
 
 ## Health & ops
 
@@ -29,7 +30,7 @@ default). On `401 token_expired` the client should POST `/api/auth/refresh`.
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| POST | `/api/rooms` | `{name, visibility}` | host = caller, seat 0 |
+| POST | `/api/rooms` | `{name, visibility}` | host = caller, seat 0, **host ready by default** |
 | GET | `/api/rooms` | — | public rooms in lobby status |
 | GET | `/api/rooms/{id}` | — | room snapshot |
 | POST | `/api/rooms/join` | `{code}` | join by 6-char code |
@@ -37,13 +38,14 @@ default). On `401 token_expired` the client should POST `/api/auth/refresh`.
 | POST | `/api/rooms/{id}/ready` | `{ready}` | toggle own readiness |
 | POST | `/api/rooms/{id}/kick` | `{user_id}` | host only, humans only |
 | POST | `/api/rooms/{id}/ai` | `{difficulty}` | host only; easy/medium/hard/expert/pro; AI auto-ready |
+| POST | `/api/rooms/{id}/ai/fill` | — | host only; fill every empty seat with a random-difficulty AI |
 | POST | `/api/rooms/{id}/ai/remove` | `{user_id}` | host only |
 
 ## Stats
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/leaderboard` | top 50 by rating |
+| GET | `/api/leaderboard` | top 50 by wins, then rating (ADR-0012) |
 | GET | `/api/stats` | caller's rating/games/wins/losses/rounds |
 
 ## Domain error codes

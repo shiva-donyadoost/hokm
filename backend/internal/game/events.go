@@ -24,10 +24,9 @@ type Event struct {
 	Data any       `json:"data,omitempty"`
 }
 
-// HakemSelectedData reports who became hakem and by drawing which card.
+// HakemSelectedData reports who became hakem.
 type HakemSelectedData struct {
 	Seat Seat `json:"seat"`
-	Card Card `json:"card"` // the Ace that decided it
 }
 
 // CardsDealtData announces private delivery of cards to one seat.

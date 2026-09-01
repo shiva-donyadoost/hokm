@@ -24,6 +24,7 @@ interface GameState {
   connect: (roomId: string) => void
   disconnect: () => void
   startGame: () => void
+  replayGame: () => void
   selectTrump: (suit: Suit) => void
   playCard: (card: { suit: Suit; rank: number }) => void
   sendChat: (body: string) => void
@@ -74,7 +75,12 @@ export const useGame = create<GameState>((set, get) => ({
           break
         case Msg.Error: {
           const p = env.payload as { code?: string; message?: string }
-          set({ lastError: p.message ?? 'unknown error' })
+          const silent = p.code === 'must_follow_suit' || p.code === 'not_your_turn' ||
+            p.code === 'card_not_owned' || p.code === 'trick_not_full' ||
+            p.code === 'wrong_phase' || p.code === 'not_hakem' || p.code === 'invalid_trump'
+          if (!silent) {
+            set({ lastError: p.message ?? 'unknown error' })
+          }
           break
         }
         default:
@@ -101,6 +107,14 @@ export const useGame = create<GameState>((set, get) => ({
     const roomId = g.room?.id
     if (g.ws && roomId && g.ws.readyState === WebSocket.OPEN) {
       g.ws.send(JSON.stringify({ type: Cmd.StartGame, id: nextId(), payload: { room_id: roomId } } satisfies Envelope))
+    }
+  },
+
+  replayGame: () => {
+    const g = get()
+    const roomId = g.room?.id
+    if (g.ws && roomId && g.ws.readyState === WebSocket.OPEN) {
+      g.ws.send(JSON.stringify({ type: Cmd.ReplayGame, id: nextId(), payload: { room_id: roomId } } satisfies Envelope))
     }
   },
 

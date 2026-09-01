@@ -199,6 +199,9 @@ export function Header({ title }: { title: string }) {
       </Link>
       <div className="flex items-center gap-2 text-sm">
         <span className="text-slate-300">{title}</span>
+        <Link to="/leaderboard" className="text-slate-400 hover:text-slate-200">
+          ranks
+        </Link>
         <Link to="/profile" className="text-teal-400 hover:underline">
           {user?.username}
         </Link>

@@ -47,7 +47,7 @@ services:
       REDIS_ADDR: redis:6379
       ROUNDS_TO_WIN: ${ROUNDS_TO_WIN:-7}
     ports:
-      - "8080:8080"
+      - "${BACKEND_HOST_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy

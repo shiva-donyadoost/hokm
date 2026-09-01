@@ -41,7 +41,7 @@ func (o *Options) roundsToWin() int {
 // NoSeat marks "no turn / no seat".
 const NoSeat Seat = -1
 
-// Game is a full Hokm match: hakem selection, trump, rounds of 13 tricks,
+// Game is a full Hokm match: hakem selection, trump, rounds of up to 13 tricks,
 // and match scoring. It is room-independent: transport layers attach
 // player IDs to seats and serialize events.
 //
@@ -173,10 +173,9 @@ func (g *Game) StartGame() ([]Event, error) {
 	return g.record(evs), nil
 }
 
-// SelectHakem runs the ace-draw: cards are turned one at a time starting
-// left of the dealer until an Ace appears; that seat becomes hakem.
-// In later rounds the hakem is already known (rotation) and this call
-// is a no-op returning no events.
+// SelectHakem picks the first-round hakem uniformly at random (ADR-0012).
+// In later rounds the hakem is already known (rotation on loss) and this
+// call is a no-op returning no events.
 func (g *Game) SelectHakem() ([]Event, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -184,25 +183,10 @@ func (g *Game) SelectHakem() ([]Event, error) {
 		return nil, ErrWrongPhase
 	}
 	if g.hakem != NoSeat {
-		// Hakem already determined by rotation at round start.
 		return nil, nil
 	}
-	var aceCard Card
-	hakem := NoSeat
-	seat := NextSeat(g.dealer)
-	for hakem == NoSeat {
-		if len(g.deck) == 0 {
-			g.deck = g.nextDeck()
-		}
-		c := g.deck[0]
-		g.deck = g.deck[1:]
-		if c.Rank == RankAce {
-			hakem, aceCard = seat, c
-		}
-		seat = NextSeat(seat)
-	}
-	g.hakem = hakem
-	evs := []Event{{Kind: EventHakemSelected, Data: HakemSelectedData{Seat: hakem, Card: aceCard}}}
+	g.hakem = Seat(g.rng.Intn(playerCount))
+	evs := []Event{{Kind: EventHakemSelected, Data: HakemSelectedData{Seat: g.hakem}}}
 	return g.record(evs), nil
 }
 
@@ -303,7 +287,7 @@ func (g *Game) PlayCardFor(s Seat, c Card, automatic bool) ([]Event, error) {
 }
 
 // CompleteTrick resolves a full trick, records it, and either hands the
-// lead to the winner or — after the 13th trick — moves the game to
+// lead to the winner or — once a team has 7 tricks — moves the game to
 // PhaseRoundComplete.
 func (g *Game) CompleteTrick() ([]Event, error) {
 	g.mu.Lock()
@@ -334,7 +318,7 @@ func (g *Game) CompleteTrick() ([]Event, error) {
 	events := []Event{{Kind: EventTrickCompleted, Data: TrickCompletedData{Trick: ct}}}
 	g.record(events)
 	g.trick = Trick{}
-	if g.tricksPlayed == tricksPerRound {
+	if g.tricksA >= tricksNeededToWinRound || g.tricksB >= tricksNeededToWinRound {
 		g.phase = PhaseRoundComplete
 		g.turn = NoSeat
 	} else {
@@ -374,6 +358,7 @@ func (g *Game) CompleteRound() ([]Event, error) {
 			GameComplete: matchOver,
 		},
 	}}
+	g.hands = [playerCount][]Card{}
 	if matchOver {
 		g.phase = PhaseGameComplete
 		return g.record(events), nil

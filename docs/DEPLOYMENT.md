@@ -4,9 +4,10 @@
 
 ```bash
 cp .env.example .env      # fill secrets locally
+.\dev.bat                 # Windows: remaps host 8080 if Hyper-V excluded it
 docker compose up --build
 # frontend  http://localhost:5173  (Vite dev server, proxies /api → backend)
-# backend   http://localhost:8080
+# backend   http://localhost:8080  (or BACKEND_HOST_PORT, e.g. 18080)
 ```
 
 Host toolchains (for fast native test loops) live on E: — see

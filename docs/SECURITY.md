@@ -18,7 +18,7 @@ render; they never compute.
 ## Authentication (ADR-0008)
 
 - bcrypt (cost 12) password hashing; 8–128 char policy.
-- JWT HS256 access tokens (15 min default), issuer-checked.
+- JWT HS256 access tokens (30-day default, ADR-0012), issuer-checked.
 - Refresh tokens: 256-bit random, stored **hashed** (SHA-256), single-use
   with rotation; expired/unknown/reused → 401.
 - Login responses are identical for unknown user vs wrong password (no

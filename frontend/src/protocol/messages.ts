@@ -82,6 +82,7 @@ export const Cmd = {
   Ping: 'PING',
   Subscribe: 'SUBSCRIBE',
   StartGame: 'START_GAME',
+  ReplayGame: 'REPLAY_GAME',
   SelectTrump: 'SELECT_TRUMP',
   PlayCard: 'PLAY_CARD',
   Chat: 'CHAT',
@@ -121,7 +122,40 @@ export function rankLabel(r: number): string {
 
 export const Suits: Suit[] = ['spades', 'hearts', 'diamonds', 'clubs']
 
+export const SUIT_GLYPH: Record<Suit, string> = {
+  spades: '\u2660',
+  hearts: '\u2665',
+  diamonds: '\u2666',
+  clubs: '\u2663',
+}
+
 export function isRed(s: Suit): boolean {
   return s === 'hearts' || s === 'diamonds'
+}
+
+// suitOrder is trump first, then opposite color, then the remaining
+// trump-color suit, then the last opposite-color suit (ADR-0012).
+export function suitOrder(trump?: Suit): [Suit, Suit, Suit, Suit] {
+  if (!trump) {
+    return ['hearts', 'spades', 'diamonds', 'clubs']
+  }
+  if (isRed(trump)) {
+    const restSame: Suit = trump === 'hearts' ? 'diamonds' : 'hearts'
+    return [trump, 'spades', restSame, 'clubs']
+  }
+  const restSame: Suit = trump === 'spades' ? 'clubs' : 'spades'
+  return [trump, 'hearts', restSame, 'diamonds']
+}
+
+// sortHand groups by suitOrder and ranks Ace (14) down to 2 inside each suit.
+export function sortHand(hand: Card[], trump?: Suit): Card[] {
+  const order = suitOrder(trump)
+  const idx: Record<string, number> = {}
+  order.forEach((s, i) => { idx[s] = i })
+  return hand.slice().sort((a, b) => {
+    const su = (idx[a.suit] ?? 99) - (idx[b.suit] ?? 99)
+    if (su !== 0) return su
+    return b.rank - a.rank
+  })
 }
 

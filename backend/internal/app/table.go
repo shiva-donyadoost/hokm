@@ -24,6 +24,7 @@ var (
 	ErrNeedFourSeats = errors.New("app: room needs exactly four seated members")
 	ErrNotSubscribed = errors.New("app: not subscribed to this room")
 	ErrChatDisabled  = errors.New("app: chat is disabled for this room")
+	ErrMatchNotOver  = errors.New("app: match is not over")
 	ErrInternal      = errors.New("app: internal error")
 )
 
@@ -212,6 +213,12 @@ func (tm *TableManager) HandleCommand(s *ws.Session, env ws.Envelope) error {
 			return fmt.Errorf("bad payload")
 		}
 		return tm.startGame(s, p.RoomID)
+	case ws.CmdReplayGame:
+		var p ws.ReplayGamePayload
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			return fmt.Errorf("bad payload")
+		}
+		return tm.replayGame(s, p.RoomID)
 	case ws.CmdSelectTrump:
 		var p ws.SelectTrumpPayload
 		if err := json.Unmarshal(env.Payload, &p); err != nil {
@@ -379,6 +386,66 @@ func (tm *TableManager) startGame(s *ws.Session, roomID string) error {
 	t.broadcast(tm)
 	t.mu.Unlock()
 	return nil
+}
+
+// replayGame starts a fresh match on an existing table after game complete.
+// Same seats, same room; host only (ADR-0010).
+func (tm *TableManager) replayGame(s *ws.Session, roomID string) error {
+	t, g, _, err := tm.authenticatedTable(s, roomID)
+	if err != nil {
+		return err
+	}
+	if t.room.HostID != s.UserID {
+		return room.ErrNotHost
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if g == nil || g.Phase() != game.PhaseGameComplete {
+		return ErrMatchNotOver
+	}
+	t.stopAutomationLocked()
+	var players [4]game.Player
+	for _, m := range t.room.Members {
+		players[m.Seat] = game.Player{ID: m.UserID, Name: m.Username}
+	}
+	ng, err := game.NewGame(players, game.Options{RoundsToWin: t.room.RoundCount})
+	if err != nil {
+		return err
+	}
+	t.g = ng
+	t.rng = rand.New(rand.NewSource(time.Now().UnixNano()))
+	for _, m := range t.room.Members {
+		if m.IsAI {
+			t.ai[m.Seat] = ai.New(m.AIDifficulty, t.rng)
+		}
+	}
+	t.fallback = ai.New("medium", t.rng)
+	t.disconnected = make(map[game.Seat]time.Time)
+	t.sentEvents = 0
+	if _, err := ng.StartGame(); err != nil {
+		return err
+	}
+	if _, err := ng.SelectHakem(); err != nil {
+		return err
+	}
+	if _, err := ng.DealInitialCards(); err != nil {
+		return err
+	}
+	metrics.GamesDelta(1)
+	t.broadcast(tm)
+	return nil
+}
+
+// stopAutomationLocked bumps timer generations and disarms pending fires
+// so a replay cannot be raced by a stale timeout or AI step.
+func (t *Table) stopAutomationLocked() {
+	t.timerGen++
+	t.stepGen++
+	t.clearDeadlineLocked()
+	if t.stepTimer != nil {
+		t.stepTimer.Stop()
+		t.stepTimer = nil
+	}
 }
 
 // selectTrump validates hakem identity via seat, runs the engine, and

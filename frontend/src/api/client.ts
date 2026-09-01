@@ -137,6 +137,22 @@ export const api = {
     request<{ room: Room }>('POST', `/rooms/${id}/kick`, { user_id }),
   addAI: (id: string, difficulty: string) =>
     request<{ room: Room }>('POST', `/rooms/${id}/ai`, { difficulty }),
+  fillAI: (id: string) =>
+    request<{ room: Room }>('POST', `/rooms/${id}/ai/fill`, {}),
   removeAI: (id: string, user_id: string) =>
     request<{ room: Room }>('POST', `/rooms/${id}/ai/remove`, { user_id }),
+  myStats: () => request<{ stats: StatsEntry }>('GET', '/stats'),
+  leaderboard: () => request<{ entries: StatsEntry[] }>('GET', '/leaderboard'),
+}
+
+export interface StatsEntry {
+  user_id: string
+  username: string
+  rating: number
+  games_played: number
+  wins: number
+  losses: number
+  rounds_won: number
+  rounds_lost: number
+  updated_at: string
 }

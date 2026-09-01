@@ -28,7 +28,7 @@ frontend/
   src/protocol     TS mirror of the WS envelope + game types
   src/state        zustand stores (auth, live game)
   src/components   Card, PlayerSeat, TrickArea, GameTable, ChatPanel
-  src/pages        Auth, Rooms, Room (lobby+table), Profile
+  src/pages        Auth, Rooms, Room (lobby+table), Profile, Leaderboard
 ```
 
 ## Request flow (gameplay)
@@ -38,12 +38,16 @@ frontend/
 3. Client `SUBSCRIBE {room_id}` → membership checked → room snapshot +
    chat history (+ live game view if a match is running).
 4. Host `START_GAME` → engine created for the room's four seats →
-   hakem-by-ace → initial deal → clients receive per-seat `STATE`.
+   random first hakem (ADR-0012) → initial deal → clients receive
+   per-seat `STATE`.
 5. Hakem `SELECT_TRUMP` → remaining deal → `trick_play`.
 6. Players `PLAY_CARD`; the server resolves tricks/rounds/matches
    automatically, projects a per-seat `STATE` view, and fans out public
    `EVENTS`.
 7. On completion the match is recorded; ratings/statistics update.
+   Host may `REPLAY_GAME` to deal a new match with the same seats
+   (ADR-0010). Profile (`GET /api/stats`) and Leaderboard
+   (`GET /api/leaderboard`) read those stats.
 8. Disconnect → grace deadline (`TURN_TIMEOUT_SECONDS`) → fallback AI plays
    for the absent human; reconnect rebinds and replays state.
 

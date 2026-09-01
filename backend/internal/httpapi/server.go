@@ -55,6 +55,7 @@ func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Ma
 	s.mux.Handle("POST /api/rooms/{id}/ready", s.RequireAuth(http.HandlerFunc(s.handleReady)))
 	s.mux.Handle("POST /api/rooms/{id}/kick", s.RequireAuth(http.HandlerFunc(s.handleKick)))
 	s.mux.Handle("POST /api/rooms/{id}/ai", s.RequireAuth(http.HandlerFunc(s.handleAddAI)))
+	s.mux.Handle("POST /api/rooms/{id}/ai/fill", s.RequireAuth(http.HandlerFunc(s.handleFillAI)))
 	s.mux.Handle("POST /api/rooms/{id}/ai/remove", s.RequireAuth(http.HandlerFunc(s.handleRemoveAI)))
 
 	// Stats & ranking (Phase 13).
@@ -93,7 +94,7 @@ func (s *Server) mountStatic(dir string) {
 	})
 }
 
-// handleLeaderboard returns the top players by rating.
+// handleLeaderboard returns the top players by wins (ADR-0012).
 func (s *Server) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	if s.scores == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}})

@@ -99,6 +99,12 @@ func TestRoomHTTPFlow(t *testing.T) {
 		t.Fatalf("add ai: %d %s", rec.Code, rec.Body.String())
 	}
 
+	// Alice fills remaining empty seats with random AI.
+	rec = authedRequest(t, s, http.MethodPost, "/api/rooms/"+created.Room.ID+"/ai/fill", tokA, map[string]any{})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("fill ai: %d %s", rec.Code, rec.Body.String())
+	}
+
 	// Alice cannot be kicked by Bob.
 	rec = authedRequest(t, s, http.MethodPost, "/api/rooms/"+created.Room.ID+"/kick", tokB,
 		map[string]string{"user_id": "whatever"})
@@ -118,8 +124,17 @@ func TestRoomHTTPFlow(t *testing.T) {
 		} `json:"room"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &got)
-	if len(got.Room.Members) != 3 {
-		t.Fatalf("members = %d, want 3", len(got.Room.Members))
+	if len(got.Room.Members) != 4 {
+		t.Fatalf("members = %d, want 4 after fill", len(got.Room.Members))
+	}
+	aiN := 0
+	for _, m := range got.Room.Members {
+		if m.IsAI {
+			aiN++
+		}
+	}
+	if aiN != 2 {
+		t.Fatalf("AI members = %d, want 2 (one add + one fill)", aiN)
 	}
 
 	// Unauthenticated access rejected.

@@ -13,6 +13,7 @@ professional-level AI opponents.
 
 ```bash
 cp .env.example .env   # fill in secrets locally
+.\dev.bat              # or: .\dev.ps1   (Windows)
 docker compose up --build
 # open http://localhost:5173
 ```
@@ -47,7 +48,7 @@ cd frontend && npm install && npm run dev
 
 ## Validation status
 
-- Engine: 52-card invariants, hakem-by-ace, follow-suit, trick winner,
+- Engine: 52-card invariants, random first hakem, follow-suit, trick winner,
   scoring — unit + property tests, 200-game random simulation.
 - Multiplayer: full-stack E2E — 4 WS clients complete a match; 1 human +
   3 AI completes a match; disconnect → AI takeover → reconnect.

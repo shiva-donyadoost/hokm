@@ -12,10 +12,12 @@ export function ChatPanel({ compact = false }: { compact?: boolean }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
 
+  const visible = chat.filter((m) => !m.is_system)
+
   useEffect(() => {
     const el = listRef.current
     if (el) el.scrollTop = el.scrollHeight
-  }, [chat.length])
+  }, [visible.length])
 
   return (
     <div className="flex flex-col border border-slate-800 rounded-xl bg-slate-900/80 overflow-hidden">
@@ -25,18 +27,12 @@ export function ChatPanel({ compact = false }: { compact?: boolean }) {
           compact ? 'h-28' : 'h-56'
         }`}
       >
-        {chat.length === 0 ? (
+        {visible.length === 0 ? (
           <p className="text-xs text-slate-600">no messages yet - say salaam</p>
         ) : (
-          chat.map((m) => (
-            <p key={m.id} className={`text-xs leading-snug ${m.is_system ? 'text-amber-300/80 italic' : ''}`}>
-              {m.is_system ? (
-                m.body
-              ) : (
-                <>
-                  <span className="font-semibold text-teal-300">{m.username}:</span> {m.body}
-                </>
-              )}
+          visible.map((m) => (
+            <p key={m.id} className="text-xs leading-snug">
+              <span className="font-semibold text-teal-300">{m.username}:</span> {m.body}
             </p>
           ))
         )}

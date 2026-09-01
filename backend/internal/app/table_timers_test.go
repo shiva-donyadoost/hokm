@@ -65,9 +65,8 @@ func joinWithAIs(t *testing.T, s *stack, tok, roomID string) *wsClient {
 }
 
 // TestHakemTimeoutAutoTrump: an idle human hakem gets trump selected
-// automatically after the configured timeout, with automatic=true. The
-// hakem is decided by an ace draw (1/4 chance per seat), so retry rooms
-// until the host is hakem.
+// automatically after the configured timeout, with automatic=true. First
+// hakem is random (ADR-0012), so retry rooms until the host is hakem.
 func TestHakemTimeoutAutoTrump(t *testing.T) {
 	s := newTimedStack(t, true)
 	tok := s.register(t, "idle_hakem")
@@ -234,5 +233,47 @@ func TestRoundCountFromRoom(t *testing.T) {
 	}
 	if len(final.RoundHistory) < 3 || len(final.RoundHistory) > 5 {
 		t.Fatalf("round history = %d entries, want 3..5 for a 3-win match", len(final.RoundHistory))
+	}
+}
+
+// TestAIActingSeatHasDisplayDeadline: when an AI seat must act, STATE still
+// carries deadline_unix_ms so the client fill-up bar can render (ADR-0012).
+func TestAIActingSeatHasDisplayDeadline(t *testing.T) {
+	tokens := auth.NewTokenManager("test-secret-value-at-least-long", time.Hour)
+	users := app.NewUserService(memory.NewUserStore(), tokens, auth.NewMemoryRefreshStore(), time.Hour)
+	rooms := room.NewManager()
+	scores := rating.NewMemoryStore()
+	gameCfg := config.DefaultGameConfig()
+	gameCfg.HakemSelectionTimeout = 2 * time.Second
+	gameCfg.CardSelectionTimeouts.Medium = 2 * time.Second
+	gameCfg.AIMoveDelay = 250 * time.Millisecond
+	gameCfg.TrickPause = 80 * time.Millisecond
+	tables := app.NewTableManager(rooms, tokens, scores, gameCfg)
+	hub := ws.NewHub(tables)
+	ts := httptest.NewServer(httpapi.NewServer(users, tokens, rooms, hub, nil, scores).Handler())
+	t.Cleanup(ts.Close)
+	s := &stack{ts: ts, client: ts.Client(), scores: scores, tables: tables}
+
+	tok := s.register(t, "deadline_watch")
+	roomID := createTimedRoom(t, s, tok, false)
+	c := joinWithAIs(t, s, tok, roomID)
+	c.send(ws.Envelope{Type: ws.CmdStartGame, Payload: mustJSONRaw(map[string]string{"room_id": roomID})})
+
+	c.readUntil(func() bool {
+		st, _ := c.snapshot()
+		if st.DeadlineUnixMs <= 0 {
+			return false
+		}
+		aiTrump := st.Phase == game.PhaseTrumpSelection && st.Hakem != st.You
+		aiCard := st.Phase == game.PhaseTrickPlay && st.Turn != game.NoSeat && st.Turn != st.You
+		return aiTrump || aiCard
+	}, 10*time.Second)
+
+	st, _ := c.snapshot()
+	if st.DeadlineUnixMs <= time.Now().UnixMilli() {
+		t.Fatalf("deadline not in the future: %d", st.DeadlineUnixMs)
+	}
+	if st.DeadlineKind != "trump" && st.DeadlineKind != "card" {
+		t.Fatalf("deadline_kind = %q, want trump or card", st.DeadlineKind)
 	}
 }

@@ -23,7 +23,8 @@ const (
 	remainingDealCount = 8
 	// tricksPerRound = cardsPerSuit.
 	tricksPerRound = 13
-	// tricksNeededToWinRound: a team needs 7 of 13 tricks to win a round.
+	// tricksNeededToWinRound: a team needs 7 tricks to win a round (play
+	// stops there; leftover cards are not played).
 	tricksNeededToWinRound = 7
 )
 
@@ -33,6 +34,9 @@ func NextSeat(s Seat) Seat { return Seat((int(s) + 1) % playerCount) }
 
 // TricksPerRound exposes the tricks-per-round constant for external packages.
 func TricksPerRound() int { return tricksPerRound }
+
+// TricksNeededToWinRound is the first-to-N trick cutoff (ADR-0012).
+func TricksNeededToWinRound() int { return tricksNeededToWinRound }
 
 // PartnerSeat returns the seat of s's partner.
 func PartnerSeat(s Seat) Seat { return Seat((int(s) + 2) % playerCount) }

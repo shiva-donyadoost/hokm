@@ -22,7 +22,7 @@ PlayCard, CompleteTrick, CompleteRound, CompleteGame`
   `ErrFollowSuit`, `ErrWrongPhase`, ...) or produces `Event`s.
 - State machine phases: `AwaitingHakem → TrumpSelection → Dealing →
   TrickPlay → RoundComplete → GameComplete`.
-- Randomness (shuffle, hakem-by-ace deal) is injected via an `rand.Rand`
+- Randomness (shuffle, first-round hakem seat) is injected via an `rand.Rand`
   interface so tests can seed determinism.
 - The engine holds a `sync.Mutex` per game; commands are serialized.
 - Events emitted by commands are the *only* data exposed to transport; the

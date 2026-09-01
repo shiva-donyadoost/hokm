@@ -23,6 +23,9 @@ func TestCreateAndCodeLookup(t *testing.T) {
 	if r.Members[0].UserID != "u1" || !r.Members[0].IsHost {
 		t.Fatal("host not seated at seat 0")
 	}
+	if !r.Members[0].Ready {
+		t.Fatal("room creator must be ready by default")
+	}
 	got, err := m.ByCode(r.Code)
 	if err != nil || got.ID != r.ID {
 		t.Fatalf("ByCode: %v %v", got.ID, err)
@@ -148,6 +151,39 @@ func TestAISlots(t *testing.T) {
 		if mem.IsAI {
 			t.Fatal("AI still present")
 		}
+	}
+}
+
+func TestFillEmptyWithAI(t *testing.T) {
+	m := newTestManager()
+	r, _ := m.Create("u1", "Alice", "Room", Public, defaultSettings())
+	got, err := m.FillEmptyWithAI(r.ID, "u1")
+	if err != nil {
+		t.Fatalf("FillEmptyWithAI: %v", err)
+	}
+	if len(got.Members) != 4 {
+		t.Fatalf("members = %d, want 4", len(got.Members))
+	}
+	aiCount := 0
+	for _, mem := range got.Members {
+		if mem.IsAI {
+			aiCount++
+			if !mem.Ready {
+				t.Fatal("AI must be ready")
+			}
+			if mem.AIDifficulty == "" {
+				t.Fatal("AI difficulty empty")
+			}
+		}
+	}
+	if aiCount != 3 {
+		t.Fatalf("AI count = %d, want 3", aiCount)
+	}
+	if _, err := m.FillEmptyWithAI(r.ID, "u1"); !errors.Is(err, ErrNoEmptySlot) {
+		t.Fatalf("want ErrNoEmptySlot, got %v", err)
+	}
+	if _, err := m.FillEmptyWithAI(r.ID, "ghost"); !errors.Is(err, ErrNotHost) {
+		t.Fatalf("want ErrNotHost, got %v", err)
 	}
 }
 

@@ -72,6 +72,28 @@ below. 7. Commit the fix.
 - AI-vs-AI simulations must complete with zero illegal moves / crashes.
 - `gofmt`/`go vet` must pass for Go; lint must pass for TypeScript.
 
+### H10. ADR for every change
+
+- An ADR **MUST** be considered for every change, not only "large" ones.
+- Before implementing: check `docs/decisions/` for an existing ADR that
+  already covers the decision. If none does, write one first.
+- The ADR must record the problem, the chosen approach, alternatives
+  rejected, and trade-offs. Never ship a behavior change without this.
+- Trivial typo/format-only diffs may reuse the latest related ADR and
+  note that reuse in the commit body; they still may not invent
+  architecture in code comments instead of an ADR.
+
+### H11. Debug results belong in this file
+
+- After every debug cycle (compile, test, runtime, Docker, DB, E2E, UI),
+  append a Lesson Learned below **in the same change**. The lesson must
+  name the symptom, the root cause, and the rule that prevents repeating
+  it. "Fixed it" without a lesson is incomplete work.
+- Search LESSONS LEARNED before retrying a failed approach. Do not
+  re-introduce a bug that already has a lesson.
+- Lessons are the project's memory: write them so a future agent who
+  never saw the incident can avoid it.
+
 ---
 
 ## LESSONS LEARNED
@@ -114,6 +136,7 @@ below. 7. Commit the fix.
 
 ### Dev tooling (2026-08-30)
 
+12. **Windows Hyper-V excluded ports vs Docker publish**: `docker compose up` failed with `listen tcp 0.0.0.0:8080: bind: An attempt was made to access a socket in a way forbidden by its access permissions` while netstat showed nothing on 8080. Root cause: WinNAT/Hyper-V `excludedportrange` (here 8061-8160) includes 8080; this is not "port in use". Fix: keep container `APP_ADDR=:8080`, publish `${BACKEND_HOST_PORT:-8080}:8080`, and have `dev.ps1` probe bindability (TcpListener on 0.0.0.0) then pick 8080/18080/28080/8000. Rule: diagnose Windows Docker publish failures with `netsh interface ipv4 show excludedportrange protocol=tcp` before assuming a leftover process; never restart WinNAT as the project-level fix (admin, races on reboot). `dev.bat` is a wrapper around `dev.ps1`.
 7. **PowerShell `$args` is a reserved automatic variable**: declaring
    `function F($args)` and splatting an array (`F @("up","-d")`) binds only
    the first element — the rest land in the automatic variable. Symptom:
@@ -165,6 +188,18 @@ below. 7. Commit the fix.
    with "repeated read on failed websocket connection". Fix: one dedicated
    reader goroutine per client feeding a channel; assertions consume the
    channel with deadlines.
+
+### Frontend lint (2026-08-31)
+
+10. **ESLint flat config rejects `--ext`**: `npm run lint` was `eslint src --ext .ts,.tsx`, which ESLint 9 (`eslint.config.js`) rejects as `Invalid option '--ext'`. Symptom: lint "fails" before any file is checked. Fix: `eslint src` only; file filtering lives in `eslint.config.js` `files`. Rule: never pass legacy CLI flags that the flat config already covers.
+11. **`requestAnimationFrame` is not a default ESLint global**: adding a fly-in animation produced `no-undef` even though TypeScript `lib: DOM` knows the API. Symptom: `npx eslint src` errors on TrickArea while `tsc` is clean. Fix: declare `requestAnimationFrame` / `cancelAnimationFrame` next to `setTimeout` in `eslint.config.js` globals. Rule: any new browser API used in `src/` must be listed in that globals block.
+
+### Wave 4 / ADR-0012 (2026-09-01)
+
+13. **First-to-7 round cut breaks "exactly 13 tricks" assertions**: after `CompleteTrick` ends the round at 7, `table_ai_test`, `table_ws_test`, `table_reconnect_test`, and `ai_test` still expected `LastTrick.Number == 13` / `completed == 13`. Symptom: E2E and AI strategy tests fail even though the engine is correct. Fix: assert 7-13 tricks and leftover cards discarded on `CompleteRound`. Rule: when a round-termination rule changes, grep tests and the Monte Carlo rollout (`mc.go` stopped only on trick 13) — property tests that allow a range are not a substitute for updating the scripted E2E checks.
+14. **System chat tests are not covered by the unit no-op**: `ChatService.System` returning without storing still left `TestTwoClientsChat` waiting for `"chatter2 joined the room"` over WS. Symptom: 5s timeout on join line. Fix: WS test waits only for player `Send` text. Rule: a unit no-op is incomplete until the protocol-level test that previously observed the message is inverted.
+15. **`noUncheckedIndexedAccess` on tuple construction**: `opp[0]` from a `Suit[]` is `Suit | undefined`, so `suitOrder` failed `tsc` even though the arrays are length-2. Fix: branch on trump and return a `[Suit, Suit, Suit, Suit]` literal. Rule: do not index short arrays to build a fixed tuple; name the four suits explicitly.
+16. **`matchMedia` follows the same ESLint-global rule as rAF (lesson 11)**: the mobile hand layout hook used `window.matchMedia` and needed `matchMedia` in `eslint.config.js` globals. Rule: any new browser API in `src/` is an ESLint global, not only a TypeScript lib type.
 
 ---
 

@@ -24,9 +24,8 @@ type ChatSink interface {
 	ChatMessage(msg ChatMessage)
 }
 
-// ChatService stores room chat (bounded history per room), enforces basic
-// moderation (length, rate), and produces system messages on membership
-// changes.
+// ChatService stores room chat (bounded history per room) and enforces
+// basic moderation (length, rate). Only player Send text is stored.
 type ChatService struct {
 	mu         sync.Mutex
 	history    map[string][]ChatMessage
@@ -89,22 +88,9 @@ func (c *ChatService) Send(roomID, userID, username, body string) (ChatMessage, 
 	return msg, nil
 }
 
-// System broadcasts a system message (joins/leaves, game events).
+// System is a no-op: only player messages appear in chat (ADR-0012).
 func (c *ChatService) System(roomID, body string) ChatMessage {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.nextID++
-	msg := ChatMessage{
-		ID:       c.nextID,
-		RoomID:   roomID,
-		UserID:   "system",
-		Username: "system",
-		Body:     body,
-		IsSystem: true,
-		At:       time.Now().UTC(),
-	}
-	c.appendLocked(msg)
-	return msg
+	return ChatMessage{RoomID: roomID, Body: body, IsSystem: true}
 }
 
 // History returns the last n messages for a room (oldest first).

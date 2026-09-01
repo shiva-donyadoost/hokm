@@ -158,13 +158,22 @@ func (m *MonteCarloStrategy) rollout(is InformationSet, candidate game.Card, han
 	if game.TeamOf(winner) == myTeam {
 		gain++
 	}
-	if len(is.History)+1 == game.TricksPerRound() {
+	wonA, wonB := is.TricksWon[0], is.TricksWon[1]
+	if game.TeamOf(winner) == game.TeamA {
+		wonA++
+	} else {
+		wonB++
+	}
+	need := game.TricksNeededToWinRound()
+	if wonA >= need || wonB >= need {
 		return gain
 	}
-	// Continue with random-legal play for the rest of the round using a
-	// compact simulation.
+	myTricks, oppTricks := wonA, wonB
+	if myTeam == game.TeamB {
+		myTricks, oppTricks = wonB, wonA
+	}
 	nextLead := winner
-	gain += float64(simulateRest(live, is.Trump, nextLead, myTeam, is.HandsLeft, m.rng))
+	gain += float64(simulateRest(live, is.Trump, nextLead, myTeam, myTricks, oppTricks, m.rng))
 	return gain
 }
 
@@ -179,13 +188,17 @@ func trickWinnerCard(trick []game.PlayedCard, winner game.Seat) game.Card {
 
 // simulateRest plays random-legal cards until the round ends, counting the
 // team's tricks.
-func simulateRest(live map[game.Seat][]game.Card, trump game.Suit, lead game.Seat, myTeam game.Team, handsLeft [4]int, rng *rand.Rand) int {
+func simulateRest(live map[game.Seat][]game.Card, trump game.Suit, lead game.Seat, myTeam game.Team, myTricks, oppTricks int, rng *rand.Rand) int {
 	count := 0
 	totalLeft := 0
 	for s := game.Seat0; s <= game.Seat3; s++ {
 		totalLeft += len(live[s])
 	}
+	need := game.TricksNeededToWinRound()
 	for totalLeft >= 4 {
+		if myTricks >= need || oppTricks >= need {
+			break
+		}
 		var trick []game.PlayedCard
 		turn := lead
 		var leadSuit game.Suit
@@ -212,6 +225,9 @@ func simulateRest(live map[game.Seat][]game.Card, trump game.Suit, lead game.Sea
 		}
 		if game.TeamOf(winner) == myTeam {
 			count++
+			myTricks++
+		} else {
+			oppTricks++
 		}
 		lead = winner
 		totalLeft -= 4

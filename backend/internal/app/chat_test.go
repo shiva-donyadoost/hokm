@@ -35,17 +35,14 @@ func TestChatSendAndHistory(t *testing.T) {
 	}
 	cs.System("r1", "bob joined the room")
 	h := cs.History("r1", 10)
-	if len(h) != 4 {
-		t.Fatalf("history = %d, want 4", len(h))
-	}
-	if !h[3].IsSystem || h[3].Body != "bob joined the room" {
-		t.Fatalf("system msg wrong: %+v", h[3])
+	if len(h) != 3 {
+		t.Fatalf("history = %d, want 3 player messages (system dropped)", len(h))
 	}
 	if h[0].Body != "hello 1" {
 		t.Fatalf("history order wrong: %+v", h[0])
 	}
-	if sink.count() != 4 {
-		t.Fatalf("sink received %d, want 4", sink.count())
+	if sink.count() != 3 {
+		t.Fatalf("sink received %d, want 3", sink.count())
 	}
 	// Bounded history.
 	for i := 0; i < 100; i++ {

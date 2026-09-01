@@ -5,6 +5,31 @@ Rules: phases are executed strictly in order; each phase is implemented,
 tested, linted, documented, committed (Conventional Commits), and marked
 complete before the next begins. See `agents.md` HARD RULES.
 
+## Enhancement Wave 4 — Table Rules, Stats Fix, Session & Chat
+
+Source: ADR-0012 (2026-09-01).
+
+| # | Phase | Scope | Status |
+|---|-------|-------|--------|
+| R | Hand order + legal dim | trump-led alternating-color sort; legal bright / illegal dim; illegal not clickable/draggable, no toast | done |
+| S | Mobile hand | hide opponent hand-backs; keep names/scores; local arc inside viewport | done |
+| T | Stats + leaderboard | rank by wins; fix `games.room_id` FK (migration 0004); profile wins/losses after each match | done |
+| U | Round cut + hakem | first to 7 tricks ends the round; round-1 hakem random; later keep-on-win / NextSeat on loss | done |
+| V | Seat score + Back to rooms | team rounds won by the name; Back to rooms only if all four seats occupied | done |
+| W | Session + turn bar + chat | access JWT 720h; deadline bar on every acting seat (human and AI); player-typed chat only | done |
+
+## Enhancement Wave 3 — Lobby, Table Feel, Replay & Stats UI
+
+Source: ADR-0010 (2026-08-30).
+
+| # | Phase | Scope | Status |
+|---|-------|-------|--------|
+| M | Lobby defaults | room creator seated ready; host `POST /rooms/{id}/ai/fill` random AI | done |
+| N | Trump from hand | hakem taps a dealt card; no suit-button overlay | done |
+| O | Table presentation | overlapping card arc (no opacity), trump glyph, directional play + collect, no yellow winner box, fill-up turn bar | done |
+| P | Replay | `REPLAY_GAME` host-only after match complete; same room/seats | done |
+| Q | Stats UI | Profile shows wins/losses/rating; Leaderboard page | done |
+
 ## Enhancement Wave 2 — Gameplay UX, Timing, Persistence & Chat
 
 Source: `impliment.md` (2026-08-30). Hard rule: **no hard-coded gameplay
@@ -46,23 +71,23 @@ values** — every timing/limit lives in the configuration layer.
 | 16 | Full Testing | unit + integration + E2E (protocol-level in Go: 4-player match, human+AI, invalid actions, reconnection) + AI simulation batches (zero illegal moves); Playwright browser E2E = follow-up | done (browser E2E pending) |
 | 17 | Observability & Performance | structured logs, /api/metrics (http, ws sessions, active games, matches, AI decision time), error hooks | done |
 | 18 | Production Docker | single deployable (frontend baked into go image), prod compose with required secrets, healthchecks, migrations, graceful shutdown | done |
-| 19 | Documentation & Release | README, ARCHITECTURE, GAME_RULES, API, WEBSOCKET, AI, DATABASE, SECURITY, DEPLOYMENT, ADRs 0001-0009, release checklist | done |
+| 19 | Documentation & Release | README, ARCHITECTURE, GAME_RULES, API, WEBSOCKET, AI, DATABASE, SECURITY, DEPLOYMENT, ADRs 0001-0012, release checklist | done |
 
 ## Game Rules (authoritative reference)
 
 Standard Iranian Hokm, 4 players, fixed teams (2v2, partners face each other):
-0. **Hakem selection**: deal one card at a time to each player in turn; the
-   first player to receive an **Ace** becomes Hakem (the dealer rotates each
-   game; Hakem role rotates to the winning team's next player each round-win
-   as configured). Ambiguities are documented in `docs/GAME_RULES.md` and
-   made configurable.
+0. **Hakem selection**: round 1 is a uniform random seat (ADR-0012). Later
+   rounds keep hakem on team win and pass to `NextSeat` on loss. Ambiguities
+   are documented in `docs/GAME_RULES.md` and made configurable.
 1. **Initial deal**: 5 cards to each player (starting left of Hakem).
 2. **Trump**: Hakem views their 5 cards and selects trump suit.
 3. **Remaining deal**: remaining 8 cards each → 13 cards per player.
-4. **Play**: 13 tricks per round. Lead suit must be followed if possible;
+4. **Play**: up to 13 tricks per round; first team to 7 tricks wins and
+   remaining tricks are skipped (ADR-0012). Lead suit must be followed if possible;
    otherwise any card (including trump). Highest trump beats highest lead
    suit; otherwise highest lead-suit card wins. Trick winner leads next.
-5. **Round scoring**: a team taking ≥7 tricks wins the round.
+5. **Round scoring**: a team taking 7 tricks wins the round immediately;
+   leftover tricks of that round are not played (ADR-0012).
 6. **Game scoring**: first team to win the configured number of rounds
    (default 7) wins the match.
 

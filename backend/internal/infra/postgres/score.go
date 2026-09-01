@@ -118,14 +118,14 @@ func (s *ScoreStore) ApplyMatch(rec rating.MatchRecord) error {
 	return tx.Commit(ctx)
 }
 
-// Leaderboard returns the top n users by rating.
+// Leaderboard returns the top n users by wins, then rating, then username.
 func (s *ScoreStore) Leaderboard(n int) ([]rating.Entry, error) {
 	ctx := context.Background()
 	rows, err := s.pool.Query(ctx, `
 		SELECT u.id, u.username, s.rating, s.games_played, s.wins, s.losses,
 		       s.rounds_won, s.rounds_lost, s.updated_at
 		FROM statistics s JOIN users u ON u.id = s.user_id
-		ORDER BY s.rating DESC, s.wins DESC
+		ORDER BY s.wins DESC, s.rating DESC, u.username ASC
 		LIMIT $1`, n)
 	if err != nil {
 		return nil, fmt.Errorf("postgres: leaderboard: %w", err)

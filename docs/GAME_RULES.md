@@ -5,11 +5,12 @@ teams: seats 0+2 = Team A, seats 1+3 = Team B. Partners sit opposite.
 
 ## Hakem selection
 
-- A full deck is shuffled; starting **left of the dealer**, one card is
-  turned to each player in turn order.
-- The **first player to receive an Ace** becomes Hakem; the deciding card
-  is part of the public `hakem_selected` event.
-- The drawn cards are folded back before the real deal.
+- **Round 1**: the engine picks a hakem uniformly at random among the
+  four seats (human or AI). The public `hakem_selected` event names that
+  seat. There is no ace-draw (ADR-0012).
+- **Later rounds**: hakem stays if their team won the previous round;
+  if the hakem's team lost, hakemship passes to the next seat
+  (`NextSeat`). See Hakem rotation below.
 
 ## Dealing
 
@@ -22,7 +23,8 @@ teams: seats 0+2 = Team A, seats 1+3 = Team B. Partners sit opposite.
 ## Play
 
 - The Hakem leads the first trick; the winner of each trick leads the next.
-- 13 tricks per round.
+- Up to 13 tricks per round. The round ends as soon as one team has
+  **7 tricks**; leftover cards are not played (ADR-0012).
 - **Follow suit**: a player holding a card of the lead suit must play one.
   Otherwise any card (including trump) may be played.
 - **Winning a trick**: the highest trump played wins; if no trump was
@@ -30,8 +32,8 @@ teams: seats 0+2 = Team A, seats 1+3 = Team B. Partners sit opposite.
 
 ## Scoring
 
-- **Round**: a team wins the round by taking **7 or more** of the 13
-  tricks.
+- **Round**: a team wins the round by taking **7 tricks** (play stops
+  at that point; remaining tricks are skipped).
 - **Match**: the first team to win the configured number of rounds
   (`ROUNDS_TO_WIN`, default 7) wins the match.
 

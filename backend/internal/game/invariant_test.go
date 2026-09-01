@@ -175,10 +175,8 @@ func TestSimulationRandomLegalGames(t *testing.T) {
 	if rep.plays == 0 || rep.tricks == 0 || rep.rounds == 0 {
 		t.Fatalf("simulation did nothing: %+v", rep)
 	}
-	// Every round's tricks must sum to 13 across all games: rounds == sum of
-	// trick completions / 13.
-	if rep.tricks != rep.rounds*tricksPerRound {
-		t.Fatalf("tricks=%d rounds=%d: tricks != rounds*13", rep.tricks, rep.rounds)
+	if rep.tricks < rep.rounds*tricksNeededToWinRound || rep.tricks > rep.rounds*tricksPerRound {
+		t.Fatalf("tricks=%d rounds=%d: expected 7-13 tricks per round", rep.tricks, rep.rounds)
 	}
 	if rep.plays != rep.tricks*playerCount {
 		t.Fatalf("plays=%d tricks=%d: plays != tricks*4", rep.plays, rep.tricks)

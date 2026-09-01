@@ -88,9 +88,10 @@ func main() {
 				}
 				totalDecisions++
 			case game.PhaseRoundComplete:
+				v := g.ViewFor(game.Seat0)
+				totalTricks += v.TricksThisRound[0] + v.TricksThisRound[1]
 				check(g.CompleteRound())
 				totalRounds++
-				totalTricks += game.TricksPerRound()
 			}
 		}
 		check(g.CompleteGame())

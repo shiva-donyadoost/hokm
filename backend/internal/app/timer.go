@@ -127,6 +127,7 @@ func (t *Table) rescheduleTimerLocked() {
 	case game.PhaseTrumpSelection:
 		seat := t.g.Hakem()
 		if t.ai[seat] != nil || t.sessions[seat] == nil {
+			t.setDisplayDeadlineLocked(DeadlineTrump, t.hakemTimeout)
 			return
 		}
 		t.armLocked(DeadlineTrump, seat, t.hakemTimeout)
@@ -136,10 +137,18 @@ func (t *Table) rescheduleTimerLocked() {
 			return
 		}
 		if t.ai[turn] != nil || t.sessions[turn] == nil {
+			t.setDisplayDeadlineLocked(DeadlineCard, t.cardTimeout)
 			return
 		}
 		t.armLocked(DeadlineCard, turn, t.cardTimeout)
 	}
+}
+
+// setDisplayDeadlineLocked publishes a countdown without arming auto-play
+// (AI / disconnected seats still act via the step scheduler).
+func (t *Table) setDisplayDeadlineLocked(kind string, d time.Duration) {
+	t.deadlineUnixMs = time.Now().Add(d).UnixMilli()
+	t.deadlineKind = kind
 }
 
 // armLocked arms the human deadline timer. Caller holds t.mu.

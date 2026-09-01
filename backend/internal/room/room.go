@@ -188,7 +188,7 @@ func (m *Manager) Create(hostID, hostName, name string, visibility Visibility, s
 		GameSpeed:   settings.GameSpeed,
 		ChatEnabled: settings.ChatEnabled,
 		Members: []Member{{
-			UserID: hostID, Username: hostName, Seat: 0, Ready: false, IsHost: true,
+			UserID: hostID, Username: hostName, Seat: 0, Ready: true, IsHost: true,
 		}},
 	}
 	m.rooms[r.ID] = r
@@ -372,6 +372,22 @@ func (m *Manager) AddAI(roomID, hostID, difficulty, username string) (Room, erro
 	if len(r.Members) >= 4 {
 		return Room{}, ErrRoomFull
 	}
+	m.addAILocked(r, difficulty, username)
+	m.notify(r)
+	return r.clone(), nil
+}
+
+var aiDifficulties = []string{"easy", "medium", "hard", "expert", "pro"}
+
+func randomAIDifficulty() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(aiDifficulties))))
+	if err != nil {
+		return "medium"
+	}
+	return aiDifficulties[n.Int64()]
+}
+
+func (m *Manager) addAILocked(r *Room, difficulty, username string) {
 	seat := 0
 	taken := map[int]bool{}
 	for _, mem := range r.Members {
@@ -384,6 +400,30 @@ func (m *Manager) AddAI(roomID, hostID, difficulty, username string) (Room, erro
 		UserID: fmt.Sprintf("ai:%s:%d", difficulty, seat), Username: username,
 		Seat: seat, Ready: true, IsAI: true, AIDifficulty: difficulty,
 	})
+}
+
+// FillEmptyWithAI seats a randomly-difficult AI in every empty seat.
+// Only the host may call it, and only while the room is in lobby.
+func (m *Manager) FillEmptyWithAI(roomID, hostID string) (Room, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	r, ok := m.rooms[roomID]
+	if !ok {
+		return Room{}, ErrRoomNotFound
+	}
+	if r.HostID != hostID {
+		return Room{}, ErrNotHost
+	}
+	if r.Status != "lobby" {
+		return Room{}, ErrGameInProgress
+	}
+	if len(r.Members) >= 4 {
+		return Room{}, ErrNoEmptySlot
+	}
+	for len(r.Members) < 4 {
+		d := randomAIDifficulty()
+		m.addAILocked(r, d, "AI ("+d+")")
+	}
 	m.notify(r)
 	return r.clone(), nil
 }

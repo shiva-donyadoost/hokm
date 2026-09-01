@@ -220,6 +220,19 @@ func (s *Server) handleAddAI(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"room": out})
 }
 
+func (s *Server) handleFillAI(w http.ResponseWriter, r *http.Request) {
+	rm, uid, ok := s.roomFromRequest(w, r, "id")
+	if !ok {
+		return
+	}
+	out, err := s.rooms.FillEmptyWithAI(rm.ID, uid)
+	if err != nil {
+		writeError(w, r, s.roomErr(err))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"room": out})
+}
+
 type removeAIRequest struct {
 	UserID string `json:"user_id"`
 }

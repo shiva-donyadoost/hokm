@@ -6,6 +6,7 @@ import { Login, Register } from './pages/Auth'
 import { Rooms } from './pages/Rooms'
 import { Room } from './pages/Room'
 import { Profile } from './pages/Profile'
+import { Leaderboard } from './pages/Leaderboard'
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const user = useAuth((s) => s.user)
@@ -54,6 +55,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Profile />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/leaderboard"
+          element={
+            <RequireAuth>
+              <Leaderboard />
             </RequireAuth>
           }
         />

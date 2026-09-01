@@ -6,8 +6,7 @@ import "strings"
 type Phase string
 
 const (
-	// PhaseAwaitingHakem: the match is set up; the hakem-selection deal
-	// (card-by-card until an Ace appears) has not run yet.
+	// PhaseAwaitingHakem: the match is set up; first hakem has not been drawn.
 	PhaseAwaitingHakem Phase = "awaiting_hakem"
 	// PhaseHakemSelection: hakem selection is in progress.
 	PhaseHakemSelection Phase = "hakem_selection"
@@ -15,7 +14,7 @@ const (
 	PhaseTrumpSelection Phase = "trump_selection"
 	// PhaseTrickPlay: all cards dealt; tricks are being played.
 	PhaseTrickPlay Phase = "trick_play"
-	// PhaseRoundComplete: a round's 13 tricks finished; scores recorded.
+	// PhaseRoundComplete: a team reached 7 tricks; leftover cards are discarded.
 	PhaseRoundComplete Phase = "round_complete"
 	// PhaseGameComplete: a team won the match.
 	PhaseGameComplete Phase = "game_complete"

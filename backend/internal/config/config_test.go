@@ -32,8 +32,11 @@ func TestLoadDefaults(t *testing.T) {
 	if c.Game.ReconnectGracePeriod != 30*time.Second {
 		t.Errorf("grace = %v, want 30s", c.Game.ReconnectGracePeriod)
 	}
-	if c.AccessTTL != 15*time.Minute {
-		t.Errorf("accessTTL = %v", c.AccessTTL)
+	if c.AccessTTL != 720*time.Hour {
+		t.Errorf("accessTTL = %v, want 720h", c.AccessTTL)
+	}
+	if c.RefreshTTL != 720*time.Hour {
+		t.Errorf("refreshTTL = %v, want 720h", c.RefreshTTL)
 	}
 }
 

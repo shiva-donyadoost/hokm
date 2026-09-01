@@ -2,7 +2,6 @@ package game
 
 import (
 	"errors"
-	"fmt"
 	"math/rand"
 	"testing"
 )
@@ -141,6 +140,7 @@ func setupToPlay(t *testing.T, g *Game, hakem Seat) {
 	if _, err := g.StartGame(); err != nil {
 		t.Fatalf("StartGame: %v", err)
 	}
+	g.hakem = hakem
 	if _, err := g.SelectHakem(); err != nil {
 		t.Fatalf("SelectHakem: %v", err)
 	}
@@ -163,22 +163,16 @@ func setupToPlay(t *testing.T, g *Game, hakem Seat) {
 
 // --- hakem selection ---
 
-func TestHakemSelectionFirstAceWins(t *testing.T) {
-	for want := 0; want < 4; want++ {
-		// Draw order from dealer seat0: seat1, seat2, seat3, seat0, ...
-		// Put the Ace in the draw position of the wanted seat; every earlier
-		// position gets a non-ace filler from the seat's own hand codes.
-		var codes [4][]string
-		drawOrder := []Seat{Seat1, Seat2, Seat3, Seat0}
-		for pos, s := range drawOrder {
-			if s == Seat(want) {
-				codes[s] = append(codes[s], "AS")
-			} else {
-				codes[s] = append(codes[s], fmt.Sprintf("%dH", 2+pos)) // unique non-ace
-			}
-		}
-		hands := makeHands(t, codes)
-		g := newTestGame(t, buildDeck(t, Seat0, hands), Options{})
+func TestHakemSelectionRandomSeat(t *testing.T) {
+	seen := map[Seat]bool{}
+	for seed := int64(1); seed <= 40; seed++ {
+		hands := makeHands(t, [4][]string{
+			{"AS", "2H", "3D", "4C", "5S"},
+			{"2S", "3H", "4D", "5C", "6S"},
+			{"7S", "8H", "9D", "10C", "JS"},
+			{"QS", "KH", "AD", "2C", "3S"},
+		})
+		g := newTestGame(t, buildDeck(t, Seat0, hands), Options{Rand: rand.New(rand.NewSource(seed))})
 		if _, err := g.StartGame(); err != nil {
 			t.Fatalf("StartGame: %v", err)
 		}
@@ -190,15 +184,13 @@ func TestHakemSelectionFirstAceWins(t *testing.T) {
 			t.Fatalf("expected one hakem_selected event, got %+v", evs)
 		}
 		data := evs[0].Data.(HakemSelectedData)
-		if data.Seat != Seat(want) {
-			t.Errorf("hakem = %v, want %v", data.Seat, want)
+		if data.Seat < Seat0 || data.Seat > Seat3 {
+			t.Fatalf("hakem seat %v out of range", data.Seat)
 		}
-		if data.Card.Rank != RankAce {
-			t.Errorf("deciding card rank = %v, want ace", data.Card.Rank)
-		}
-		if g.Phase() != PhaseHakemSelection {
-			t.Errorf("phase after select = %s, want hakem_selection", g.Phase())
-		}
+		seen[data.Seat] = true
+	}
+	if len(seen) < 2 {
+		t.Fatalf("random hakem did not vary across seeds: %v", seen)
 	}
 }
 
@@ -370,13 +362,12 @@ func TestRoundCompletionAndMatchWin(t *testing.T) {
 	g := newTestGame(t, buildDeck(t, Seat0, hands), Options{RoundsToWin: 1})
 	setupToPlay(t, g, Seat0)
 
-	// Play all 13 tricks with a legal bot.
 	playRoundLegally(t, g)
 	if g.Phase() != PhaseRoundComplete {
 		t.Fatalf("phase = %s, want round_complete", g.Phase())
 	}
-	if g.tricksA+g.tricksB != 13 {
-		t.Fatalf("tricks sum = %d, want 13", g.tricksA+g.tricksB)
+	if g.tricksA+g.tricksB < tricksNeededToWinRound {
+		t.Fatalf("tricks sum = %d, want >= %d", g.tricksA+g.tricksB, tricksNeededToWinRound)
 	}
 	// Someone must have ≥7 tricks.
 	if g.tricksA < 7 && g.tricksB < 7 {
@@ -413,11 +404,51 @@ func TestRoundCompletionAndMatchWin(t *testing.T) {
 	}
 }
 
-// playRoundLegally plays all 13 tricks of the current round choosing the
+func TestRoundEndsWhenTeamReachesSevenTricks(t *testing.T) {
+	hands := makeHands(t, [4][]string{
+		{"AS", "2H", "3D", "4C", "5S"},
+		{"2S", "3H", "4D", "5C", "6S"},
+		{"7S", "8H", "9D", "10C", "JS"},
+		{"QS", "KH", "AD", "2C", "3S"},
+	})
+	g := newTestGame(t, buildDeck(t, Seat0, hands), Options{RoundsToWin: 1})
+	setupToPlay(t, g, Seat0)
+	playRoundLegally(t, g)
+	if g.Phase() != PhaseRoundComplete {
+		t.Fatalf("phase = %s, want round_complete", g.Phase())
+	}
+	if g.tricksPlayed < tricksNeededToWinRound || g.tricksPlayed > tricksPerRound {
+		t.Fatalf("tricksPlayed = %d, want 7-13", g.tricksPlayed)
+	}
+	if g.tricksA < 7 && g.tricksB < 7 {
+		t.Fatalf("no team reached 7 tricks: A=%d B=%d", g.tricksA, g.tricksB)
+	}
+	left := 0
+	for s := Seat0; s <= Seat3; s++ {
+		left += len(g.hands[s])
+	}
+	wantLeft := (tricksPerRound - g.tricksPlayed) * playerCount
+	if left != wantLeft {
+		t.Fatalf("cards left in hands = %d, want %d after %d tricks", left, wantLeft, g.tricksPlayed)
+	}
+	if _, err := g.PlayCard(Seat0, parseCard(t, "2H")); !errors.Is(err, ErrWrongPhase) {
+		t.Fatalf("play after round cut: %v, want ErrWrongPhase", err)
+	}
+	if _, err := g.CompleteRound(); err != nil {
+		t.Fatalf("CompleteRound: %v", err)
+	}
+	for s := Seat0; s <= Seat3; s++ {
+		if len(g.hands[s]) != 0 {
+			t.Fatalf("seat %d hand not discarded: %d cards", s, len(g.hands[s]))
+		}
+	}
+}
+
+// playRoundLegally plays tricks until a team reaches 7, choosing the
 // first legal card per seat, asserting no command ever errors.
 func playRoundLegally(t *testing.T, g *Game) {
 	t.Helper()
-	for tricks := 0; tricks < tricksPerRound; tricks++ {
+	for g.Phase() == PhaseTrickPlay {
 		for play := 0; play < playerCount; play++ {
 			turn := g.turn
 			hand := g.hands[turn]

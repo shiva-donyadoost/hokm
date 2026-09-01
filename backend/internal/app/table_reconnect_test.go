@@ -83,8 +83,8 @@ func TestDisconnectAITakeoverAndReconnect(t *testing.T) {
 	if final.Phase != "game_complete" || !final.MatchOver {
 		t.Fatalf("match did not complete after takeover: phase=%s", final.Phase)
 	}
-	if final.LastTrick == nil || final.LastTrick.Number != 13 {
-		t.Fatalf("last trick = %+v, want #13", final.LastTrick)
+	if final.LastTrick == nil || final.LastTrick.Number < 7 || final.LastTrick.Number > 13 {
+		t.Fatalf("last trick = %+v, want number 7-13", final.LastTrick)
 	}
 	t.Logf("takeover match complete: roundsA=%v roundsB=%v", final.RoundsWon[0], final.RoundsWon[1])
 }

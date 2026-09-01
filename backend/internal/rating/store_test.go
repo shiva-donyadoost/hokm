@@ -37,8 +37,7 @@ func TestMemoryStoreApplyMatch(t *testing.T) {
 	if ai.GamesPlayed != 0 {
 		t.Fatalf("AI should not be scored: %+v", ai)
 	}
-	// Leaderboard: 3 humans sorted by rating — both winners (tied rating)
-	// must rank above the loser, regardless of map iteration order.
+	// Leaderboard: 3 humans sorted by wins, then rating.
 	lb, _ := s.Leaderboard(10)
 	if len(lb) != 3 {
 		t.Fatalf("leaderboard len = %d, want 3", len(lb))
@@ -67,5 +66,22 @@ func TestMemoryStoreZeroSum(t *testing.T) {
 	after := a.Rating + b.Rating
 	if before != after {
 		t.Fatalf("rating not conserved: %d → %d", before, after)
+	}
+}
+
+func TestLeaderboardRanksByWinsThenRatingThenName(t *testing.T) {
+	s := NewMemoryStore()
+	s.entries["low"] = &Entry{UserID: "low", Username: "zoe", Wins: 1, Rating: 2000}
+	s.entries["hi"] = &Entry{UserID: "hi", Username: "amy", Wins: 5, Rating: 800}
+	s.entries["hi2"] = &Entry{UserID: "hi2", Username: "bob", Wins: 5, Rating: 800}
+	lb, err := s.Leaderboard(10)
+	if err != nil {
+		t.Fatalf("Leaderboard: %v", err)
+	}
+	if len(lb) != 3 {
+		t.Fatalf("len = %d, want 3", len(lb))
+	}
+	if lb[0].Username != "amy" || lb[1].Username != "bob" || lb[2].Username != "zoe" {
+		t.Fatalf("order = %s,%s,%s want amy,bob,zoe", lb[0].Username, lb[1].Username, lb[2].Username)
 	}
 }

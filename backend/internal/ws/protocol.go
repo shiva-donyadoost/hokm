@@ -18,6 +18,7 @@ const (
 	CmdPing        = "PING"
 	CmdSubscribe   = "SUBSCRIBE"    // payload: {room_id}
 	CmdStartGame   = "START_GAME"   // payload: {room_id}
+	CmdReplayGame  = "REPLAY_GAME"  // payload: {room_id}; host, match over
 	CmdSelectTrump = "SELECT_TRUMP" // payload: {room_id, suit}
 	CmdPlayCard    = "PLAY_CARD"    // payload: {room_id, card:{suit,rank}}
 	CmdChat        = "CHAT"         // payload: {room_id, body}
@@ -55,6 +56,11 @@ type WireCard struct {
 }
 
 type StartGamePayload struct {
+	RoomID string `json:"room_id"`
+}
+
+// ReplayGamePayload restarts a finished match with the same seats.
+type ReplayGamePayload struct {
 	RoomID string `json:"room_id"`
 }
 

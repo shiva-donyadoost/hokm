@@ -9,8 +9,8 @@ import (
 	"github.com/hokm/platform/internal/ws"
 )
 
-// TestTwoClientsChat covers the chat round-trip over WebSockets, including
-// the system message emitted when a member joins.
+// TestTwoClientsChat covers the chat round-trip over WebSockets.
+// System join/leave lines are not emitted (ADR-0012).
 func TestTwoClientsChat(t *testing.T) {
 	s := newStack(t)
 	tokA := s.register(t, "chatter1")
@@ -30,12 +30,14 @@ func TestTwoClientsChat(t *testing.T) {
 		return id == roomID
 	}, 5*time.Second)
 
-	// B joins via REST then subscribes → A receives a join system message.
 	s.post(t, "/api/rooms/join", tokB, map[string]string{"code": code})
 	cb := dialWS(t, s, tokB, "chatter2")
 	cb.send(ws.Envelope{Type: ws.CmdSubscribe, Payload: mustJSONRaw(map[string]string{"room_id": roomID})})
+	cb.readUntil(func() bool {
+		_, id := cb.snapshot()
+		return id == roomID
+	}, 5*time.Second)
 
-	// B sends a chat line; both clients must see it.
 	cb.send(ws.Envelope{Type: ws.CmdChat, Payload: mustJSONRaw(map[string]string{
 		"room_id": roomID, "body": "salaam everyone",
 	})})
@@ -57,7 +59,6 @@ func TestTwoClientsChat(t *testing.T) {
 			}
 		}
 	}
-	waitForChat(ca, "chatter2 joined the room")
 	waitForChat(ca, "salaam everyone")
 	waitForChat(cb, "salaam everyone")
 

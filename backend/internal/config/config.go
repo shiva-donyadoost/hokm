@@ -128,7 +128,7 @@ func Load() (*Config, error) {
 		Addr:       get("APP_ADDR", ":8080"),
 		LogLevel:   get("LOG_LEVEL", "info"),
 		JWTSecret:  get("JWT_SECRET", ""),
-		AccessTTL:  getDur("JWT_ACCESS_TTL", 15*time.Minute),
+		AccessTTL:  getDur("JWT_ACCESS_TTL", 720*time.Hour),
 		RefreshTTL: getDur("JWT_REFRESH_TTL", 720*time.Hour),
 		Postgres: PostgresConfig{
 			Host:     get("POSTGRES_HOST", "localhost"),

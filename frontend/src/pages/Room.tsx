@@ -157,26 +157,36 @@ export function Room() {
             </button>
           ) : null}
           {isHost && room.members.length < 4 ? (
-            <select
-              className="input w-auto text-sm"
-              defaultValue=""
-              onChange={async (e) => {
-                const d = e.target.value
-                if (d) {
-                  await api.addAI(room.id, d)
-                  e.target.value = ''
-                }
-              }}
-            >
-              <option value="" disabled>
-                + Add AI
-              </option>
-              {['easy', 'medium', 'hard', 'expert', 'pro'].map((d) => (
-                <option key={d} value={d}>
-                  AI ({d})
+            <>
+              <button
+                className="btn-secondary"
+                onClick={async () => {
+                  await api.fillAI(room.id)
+                }}
+              >
+                Fill empty with AI
+              </button>
+              <select
+                className="input w-auto text-sm"
+                defaultValue=""
+                onChange={async (e) => {
+                  const d = e.target.value
+                  if (d) {
+                    await api.addAI(room.id, d)
+                    e.target.value = ''
+                  }
+                }}
+              >
+                <option value="" disabled>
+                  + Add AI
                 </option>
-              ))}
-            </select>
+                {['easy', 'medium', 'hard', 'expert', 'pro'].map((d) => (
+                  <option key={d} value={d}>
+                    AI ({d})
+                  </option>
+                ))}
+              </select>
+            </>
           ) : null}
           <button
             className="btn-danger"

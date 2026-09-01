@@ -19,6 +19,7 @@ upgrade; session bound to the user for its lifetime).
 | `PING` | — | keepalive; server answers `PONG` |
 | `SUBSCRIBE` | `{room_id}` | membership required; sends ROOM snapshot, chat history, and live STATE if a match runs; rebinds reconnects |
 | `START_GAME` | `{room_id}` | host only; 4 seated members, all ready |
+| `REPLAY_GAME` | `{room_id}` | host only; table must be `game_complete`; same seats, new deal |
 | `SELECT_TRUMP` | `{room_id, suit}` | hakem only, during trump phase |
 | `PLAY_CARD` | `{room_id, card:{suit, rank}}` | seat's turn; ownership + follow-suit enforced |
 | `CHAT` | `{room_id, body}` | member only; 1–500 chars, 5 per 10 s |
@@ -30,7 +31,7 @@ upgrade; session bound to the user for its lifetime).
 | `STATE` | full per-seat `SeatView` (own hand in full, others as counts) |
 | `EVENTS` | one public event per message (`name`): `hakem_selected`, `trump_selected`, `card_played`, `trick_completed`, `round_completed`, `game_completed`, `next_round_started` |
 | `ROOM` | lobby snapshot after any room mutation |
-| `CHAT` | `{id, room_id, user_id, username, body, is_system, at}` |
+| `CHAT` | `{id, room_id, user_id, username, body, is_system, at}` — player-typed only; the server does not emit system/timeout/join lines (ADR-0012) |
 | `ERROR` | rejected command reason |
 | `PONG` | heartbeat reply |
 
