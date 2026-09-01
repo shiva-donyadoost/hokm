@@ -19,7 +19,6 @@ export function Room() {
   const connect = useGame((s) => s.connect)
   const disconnect = useGame((s) => s.disconnect)
   const startGame = useGame((s) => s.startGame)
-  const ws = useGame((s) => s.ws)
   const connected = useGame((s) => s.connected)
   const room = useGame((s) => s.room)
   const view = useGame((s) => s.view)
@@ -31,10 +30,7 @@ export function Room() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, user?.id])
 
-  // Re-subscribe after reconnects.
-  useEffect(() => {
-    if (connected && ws && ws.readyState === WebSocket.OPEN) return
-  }, [connected, ws])
+  // Unexpected WS close is retried inside useGame.connect (ADR-0014).
 
   useEffect(() => {
     if (room?.status === 'closed') {

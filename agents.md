@@ -206,6 +206,35 @@ below. 7. Commit the fix.
 17. **Refresh logged the user out because Room treated `user === null` as "go to login"**: `RequireAuth` started with `loading: false` and `Room.tsx` called `navigate('/login')` while `/me` was still in flight. Symptom: F5 on lobby/table dumps you on the login page even with a valid refresh token. Fix: `booting` gate until `ensureFreshAccess` + `/me`; Room never navigates to login while tokens exist. Rule: protected routes must not redirect on a null user until session restore has finished, and a network blip must not clear tokens.
 18. **Mobile drag missed pointer events because capture was on `e.target`**: the inner card `<img>`/`<button>` received the touch, so the wrapper's `onPointerMove`/`onPointerUp` never ran. Combined with a rotated fan, fingers could not drag. Fix: `touch-action: none`, capture on `e.currentTarget`, `pointer-events: none` on the Card, overlapping row with no rotation. Rule: pointer capture belongs on the element that owns the handlers; never assume the event target is that element on touch devices.
 
+### Wave 6 / ADR-0014 (2026-09-01)
+
+19. **Deal animation and drag shared one `transform` owner**: hand cards used a
+    single DOM node for CSS `deal-in` (`animation-fill-mode: both`, animating
+    `transform`), fan/select inline transform, and imperative drag updates.
+    After the deal animation the fill kept owning `transform`, so drag appeared
+    to do nothing while the UI still showed "your turn". Fix: outer node owns
+    deal animation (keyframes end with `transform: none`); inner node owns
+    fan/drag transforms and pointer handlers. Rule: never put a CSS animation
+    that touches `transform` on the same element that must accept JS/React
+    transform updates (drag, fan, select lift).
+20. **Dimmed/illegal overlapping cards still hit-tested**: non-playable hand
+    wrappers omitted handlers but kept default `pointer-events`, swallowing
+    taps on partially covered legal cards. Fix: `pointer-events: none` on
+    non-playable wrappers. Rule: in an overlapping hand, disabled cards must
+    not participate in hit-testing.
+21. **`playCard` silently no-oped on a dead WebSocket**: UI kept the last
+    SeatView ("your turn") after `onclose`, while `playCard` required
+    `readyState === OPEN` with no error and Room's reconnect effect was a
+    stub. Fix: bounded auto-reconnect in `useGame.connect`, surface
+    `lastError` + reconnect banner, structured client diagnostics
+    (`window.__HOKM_DIAG__`). Rule: never drop a user command on a closed
+    socket without visible feedback and a reconnect path.
+22. **STATE carried stale `deadline_*`**: `broadcast` pushed views then called
+    `rescheduleTimerLocked`, so the armed deadline was not in the message
+    clients just received. Fix: reschedule before the STATE send. Rule: any
+    field derived during broadcast must be computed before the payload is
+    marshaled.
+
 ---
 
 ## PROJECT CONVENTIONS

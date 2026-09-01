@@ -6,6 +6,14 @@ import { TrickArea } from './TrickArea'
 import { useGame } from '../state/game'
 import { useAuth } from '../state/auth'
 import { ANIM, animDuration } from '../config'
+import { diagInfo, logPlayAttempt, logTurnSnapshot } from '../diagnostics/clientLog'
+import {
+  cardKey,
+  isCardLegal,
+  isMyTurn,
+  legalCards,
+  requiredLeadSuit,
+} from '../game/legality'
 import {
   SUIT_GLYPH,
   isRed,
@@ -72,6 +80,8 @@ export function GameTable({ room, view }: GameTableProps) {
   const replayGame = useGame((s) => s.replayGame)
   const lastError = useGame((s) => s.lastError)
   const chat = useGame((s) => s.chat)
+  const connected = useGame((s) => s.connected)
+  const ws = useGame((s) => s.ws)
   const myId = useAuth0()
   const narrow = useNarrow()
 
@@ -139,40 +149,102 @@ export function GameTable({ room, view }: GameTableProps) {
     prevHand.current = handLen
   }, [handLen])
 
-  const leadSuit = useMemo(() => {
-    const trick = view.current_trick
-    if (!trick || trick.length === 0 || !view.your_hand) return null
-    const first = trick[0]
-    if (!first) return null
-    const lead = first.card.suit
-    const hasLead = view.your_hand.some((c) => c.suit === lead)
-    return hasLead ? lead : null
-  }, [view])
+  const leadSuit = useMemo(
+    () => requiredLeadSuit(view.your_hand, view.current_trick),
+    [view.your_hand, view.current_trick],
+  )
 
-  const myTurn =
-    view.phase === 'trick_play' && view.turn === view.you &&
-    (view.current_trick?.length ?? 0) < 4 && !view.match_over
+  const myTurn = isMyTurn({
+    phase: view.phase,
+    turn: view.turn,
+    you: view.you,
+    trickLen: view.current_trick?.length ?? 0,
+    matchOver: view.match_over,
+  })
 
+  const legalOpts = useMemo(() => ({ myTurn, leadSuit }), [myTurn, leadSuit])
+  const isLegal = (c: { suit: Suit }) => isCardLegal(c, legalOpts)
   const followsSuit = (c: { suit: Suit }) => leadSuit === null || c.suit === leadSuit
-  const isLegal = (c: { suit: Suit }) => myTurn && followsSuit(c)
-
-  const keyOf = (c: { suit: Suit; rank: number }) => c.suit + c.rank
-
-  const tryPlay = (c: { suit: Suit; rank: number }) => {
-    if (!isLegal(c)) return
-    playCard(c)
-    setSelected(null)
-  }
+  const keyOf = cardKey
 
   const trumpPending =
     view.phase === 'trump_selection' && view.hakem === view.you && !view.trump
 
+  const wsState = ws?.readyState ?? 'none'
+  const handKeys = useMemo(
+    () => (view.your_hand ?? []).map(cardKey),
+    [view.your_hand],
+  )
+  const legalKeys = useMemo(
+    () => legalCards(view.your_hand ?? [], legalOpts).map(cardKey),
+    [view.your_hand, legalOpts],
+  )
+
+  // Snapshot when turn / phase / connection changes (stuck-turn diagnosis).
+  useEffect(() => {
+    logTurnSnapshot({
+      phase: view.phase,
+      turn: view.turn,
+      you: view.you,
+      myTurn,
+      trumpPending,
+      matchOver: view.match_over,
+      trickLen: view.current_trick?.length ?? 0,
+      handKeys,
+      legalKeys,
+      selected,
+      collecting,
+      reveal: reveal !== null,
+      connected,
+      wsState,
+      deadlineKind: view.deadline_kind,
+    })
+  }, [
+    view.phase, view.turn, view.you, myTurn, trumpPending, view.match_over,
+    view.current_trick?.length, handKeys, legalKeys, selected, collecting, reveal,
+    connected, wsState, view.deadline_kind,
+  ])
+
+  const tryPlay = (c: { suit: Suit; rank: number }) => {
+    if (!isLegal(c)) {
+      logPlayAttempt({
+        action: 'play_card', ok: false, reason: 'not_legal_client',
+        card: c, myTurn, phase: view.phase, turn: view.turn, you: view.you,
+        wsState, legalKeys,
+      })
+      return
+    }
+    if (!connected || ws?.readyState !== WebSocket.OPEN) {
+      logPlayAttempt({
+        action: 'play_card', ok: false, reason: 'ws_not_open',
+        card: c, myTurn, phase: view.phase, turn: view.turn, you: view.you,
+        wsState, legalKeys,
+      })
+    } else {
+      logPlayAttempt({
+        action: 'play_card', ok: true, reason: 'sent',
+        card: c, myTurn, phase: view.phase, turn: view.turn, you: view.you,
+        wsState, legalKeys,
+      })
+    }
+    playCard(c)
+    setSelected(null)
+  }
+
   const onCardTap = (c: { suit: Suit; rank: number }) => {
     if (trumpPending) {
+      diagInfo('play', 'select_trump_tap', { suit: c.suit, wsState })
       selectTrump(c.suit)
       return
     }
-    if (!isLegal(c)) return
+    if (!isLegal(c)) {
+      logPlayAttempt({
+        action: 'play_card', ok: false, reason: 'tap_not_legal',
+        card: c, myTurn, phase: view.phase, turn: view.turn, you: view.you,
+        wsState, legalKeys,
+      })
+      return
+    }
     const k = keyOf(c)
     if (selected === k) {
       tryPlay(c)
@@ -181,8 +253,8 @@ export function GameTable({ room, view }: GameTableProps) {
     }
   }
 
-  // Drag and drop via pointer events. Capture on the wrapper so mobile
-  // touches are not stolen by the inner <img>/<button> (ADR-0013).
+  // Drag on the INNER transform node so CSS deal animation (outer) cannot
+  // own the same transform used for fan + drag (ADR-0014).
   const onDragStart = (e: ReactPointerEvent, c: { suit: Suit; rank: number }) => {
     if (!trumpPending && !isLegal(c)) return
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -199,27 +271,35 @@ export function GameTable({ room, view }: GameTableProps) {
     const el = document.getElementById('card-' + drag.current.card)
     if (el) el.style.transform = `translate(${drag.current.dx}px, ${drag.current.dy - 24}px) scale(1.08)`
   }
+  const resetDragTransform = (cardId: string | null) => {
+    if (!cardId) return
+    const el = document.getElementById('card-' + cardId)
+    if (!el) return
+    el.style.transition = `transform ${animDuration(ANIM.cardReturnMs)}ms ease`
+    el.style.transform = ''
+    setTimeout(() => { if (el) el.style.transition = '' }, animDuration(ANIM.cardReturnMs))
+  }
   const onDragEnd = (c: { suit: Suit; rank: number }) => {
     const d = drag.current
     if (!d) return
-    const el = document.getElementById('card-' + d.card)
     drag.current = null
-    if (el) {
-      el.style.transition = `transform ${animDuration(ANIM.cardReturnMs)}ms ease`
-      el.style.transform = ''
-      setTimeout(() => { if (el) el.style.transition = '' }, animDuration(ANIM.cardReturnMs))
-    }
+    resetDragTransform(d.card)
     if (trumpPending) {
       onCardTap(c)
       return
     }
     const played = view.your_hand?.find((x) => keyOf(x) === d.card)
-    const lift = narrow ? 36 : 64
-    if (played && d.moved && d.dy < -lift && isLegal(played)) {
+    const liftThresh = narrow ? 36 : 64
+    if (played && d.moved && d.dy < -liftThresh && isLegal(played)) {
       tryPlay(played)
       return
     }
     if (!d.moved) onCardTap(c)
+  }
+  const onDragCancel = () => {
+    const d = drag.current
+    drag.current = null
+    if (d) resetDragTransform(d.card)
   }
 
   const actingSeat =
@@ -376,30 +456,38 @@ export function GameTable({ room, view }: GameTableProps) {
               return (
                 <div
                   key={k}
-                  id={'card-' + k}
                   data-deal={dealDelay}
-                  className="deal-card touch-none"
+                  className="deal-card"
                   style={{
-                    transform: `rotate(${angle}deg) translateY(${lift}px)`,
-                    transformOrigin: 'bottom center',
                     marginLeft: i === 0 ? 0 : -overlap,
                     zIndex: selected === k ? 50 : i,
                     animationDelay: `${dealDelay}ms`,
-                    touchAction: 'none',
+                    // Illegal cards must not swallow hits on covered legal cards.
+                    pointerEvents: playable ? 'auto' : 'none',
                   }}
-                  onPointerDown={playable ? (e) => onDragStart(e, c) : undefined}
-                  onPointerMove={playable ? onDragMove : undefined}
-                  onPointerUp={playable ? () => onDragEnd(c) : undefined}
-                  onPointerCancel={playable ? () => { drag.current = null } : undefined}
                 >
-                  <Card
-                    card={c}
-                    size={narrow ? 'md' : 'lg'}
-                    disabled={!playable}
-                    dimmed={view.phase === 'trick_play' && !followsSuit(c)}
-                    selected={selected === k}
-                    style={{ pointerEvents: 'none' }}
-                  />
+                  <div
+                    id={'card-' + k}
+                    className="touch-none"
+                    style={{
+                      transform: `rotate(${angle}deg) translateY(${lift}px)`,
+                      transformOrigin: 'bottom center',
+                      touchAction: 'none',
+                    }}
+                    onPointerDown={playable ? (e) => onDragStart(e, c) : undefined}
+                    onPointerMove={playable ? onDragMove : undefined}
+                    onPointerUp={playable ? () => onDragEnd(c) : undefined}
+                    onPointerCancel={playable ? onDragCancel : undefined}
+                  >
+                    <Card
+                      card={c}
+                      size={narrow ? 'md' : 'lg'}
+                      disabled={!playable}
+                      dimmed={view.phase === 'trick_play' && !followsSuit(c)}
+                      selected={selected === k}
+                      style={{ pointerEvents: 'none' }}
+                    />
+                  </div>
                 </div>
               )
             })}
@@ -435,8 +523,16 @@ export function GameTable({ room, view }: GameTableProps) {
         />
       ) : null}
 
+      {!connected ? (
+        <div className="fixed top-12 inset-x-0 flex justify-center pointer-events-none z-50">
+          <div className="px-3 py-1.5 rounded-lg bg-amber-500/95 text-slate-900 text-sm shadow-lg font-semibold">
+            disconnected - reconnecting...
+          </div>
+        </div>
+      ) : null}
+
       {lastError ? (
-        <div className="fixed top-12 inset-x-0 flex justify-center pointer-events-none">
+        <div className="fixed top-20 inset-x-0 flex justify-center pointer-events-none z-50">
           <div className="px-3 py-1.5 rounded-lg bg-rose-600/90 text-white text-sm shadow-lg">
             {lastError}
           </div>

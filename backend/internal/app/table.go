@@ -529,9 +529,10 @@ func (tm *TableManager) sendStateLocked(t *Table, s *ws.Session) {
 	s.Send(ws.Envelope{Type: ws.MsgState, Payload: mustMarshal(t.g.ViewFor(seat))})
 }
 
-// broadcast sends per-seat views and *new* public events to all seated
-// sessions, then re-arms the authoritative deadline and the next paced
-// automatic step. Caller holds t.mu.
+// broadcast re-arms the authoritative deadline, then sends per-seat views
+// (with fresh deadline fields) and *new* public events, then schedules the
+// next paced automatic step. Deadline is armed BEFORE STATE so clients do
+// not render a stale countdown after a turn change (ADR-0014). Caller holds t.mu.
 func (t *Table) broadcast(tm *TableManager) {
 	evs := t.g.Events()
 	fresh := evs
@@ -542,6 +543,7 @@ func (t *Table) broadcast(tm *TableManager) {
 	}
 	t.sentEvents = len(evs)
 	public := publicEvents(fresh)
+	t.rescheduleTimerLocked()
 	for seat, sess := range t.sessions {
 		if sess == nil {
 			continue
@@ -554,7 +556,6 @@ func (t *Table) broadcast(tm *TableManager) {
 			sess.Send(ws.Envelope{Type: ws.MsgEvents, Name: string(ev.Kind), Payload: mustMarshal(ev.Data)})
 		}
 	}
-	t.rescheduleTimerLocked()
 	t.scheduleNextLocked()
 }
 
