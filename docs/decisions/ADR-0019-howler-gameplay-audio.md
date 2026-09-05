@@ -1,4 +1,4 @@
-# ADR-0019
+ ADR-0019
 
 Status: Accepted
 Date: 2026-09-05
@@ -41,3 +41,8 @@ when lead is non-trump and winner card is trump.
 - Adds howler dependency.
 - Asset validation includes SFX filenames.
 - Play SFX delayed to card land timing.
+
+## Supersession
+
+Asset delivery amended by ADR-0020 (Vite-inlined data: URLs; no Howler
+network fetches of /assets/audio/*). Mapping/AudioManager rules above still apply.

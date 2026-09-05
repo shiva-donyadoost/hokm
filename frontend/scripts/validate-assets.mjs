@@ -1,4 +1,4 @@
-// Build-time asset validation (impliment.md §36): all 52 card faces + the
+/ Build-time asset validation (impliment.md): all 52 card faces + the
 // card back must exist. Missing assets fail the build with a clear error
 // instead of rendering broken images at runtime.
 import { readdirSync } from 'node:fs'
@@ -22,14 +22,20 @@ for (const s of SUITS) {
 if (!present.has('card-back.svg')) missing.push('card-back.svg')
 
 if (missing.length > 0) {
-  console.error(`card asset validation FAILED — missing ${missing.length} assets:`)
+  console.error(`card asset validation FAILED - missing ${missing.length} assets:`)
   for (const f of missing) console.error(`  ${f}`)
   process.exit(1)
 }
 console.log(`card assets OK (${present.size} files validated)`)
 
-// Audio SFX (ADR-0019)
-const audioDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'assets', 'audio')
+// Audio SFX (ADR-0019 / ADR-0020) — source of truth is src/assets/audio
+// (Vite-imported + inlined). public/assets/audio is kept as a replaceable
+// mirror with the same filenames.
+const root = dirname(fileURLToPath(import.meta.url))
+const audioDirs = [
+  join(root, '..', 'src', 'assets', 'audio'),
+  join(root, '..', 'public', 'assets', 'audio'),
+]
 const audioRequired = [
   'card-deal-01.wav', 'card-deal-01.ogg',
   'card-deal-02.wav', 'card-deal-02.ogg',
@@ -43,11 +49,13 @@ const audioRequired = [
   'trick-won.wav', 'trick-won.ogg',
   'card-collect.wav', 'card-collect.ogg',
 ]
-const audioPresent = new Set(readdirSync(audioDir))
-const audioMissing = audioRequired.filter((f) => !audioPresent.has(f))
-if (audioMissing.length > 0) {
-  console.error('audio asset validation FAILED - missing ' + audioMissing.length + ' assets:')
-  for (const f of audioMissing) console.error('  ' + f)
-  process.exit(1)
+for (const audioDir of audioDirs) {
+  const audioPresent = new Set(readdirSync(audioDir))
+  const audioMissing = audioRequired.filter((f) => !audioPresent.has(f))
+  if (audioMissing.length > 0) {
+    console.error('audio asset validation FAILED in ' + audioDir + ' - missing ' + audioMissing.length + ' assets:')
+    for (const f of audioMissing) console.error('  ' + f)
+    process.exit(1)
+  }
+  console.log('audio assets OK in ' + audioDir + ' (' + audioRequired.length + ' files validated)')
 }
-console.log('audio assets OK (' + audioRequired.length + ' files validated)')

@@ -1,7 +1,32 @@
-import { ANIM } from '../config'
+mport { ANIM } from '../config'
 
-// Presentation-only audio configuration (ADR-0019). Paths are Vite/public
-// URLs that also work when the build is served from WEB_DIR in Docker.
+// Presentation-only audio configuration (ADR-0019 / ADR-0020).
+// SFX are Vite-imported from src/assets/audio and inlined as data: URLs
+// at build time so Howler never performs network fetches that download
+// managers (IDM, etc.) can intercept.
+
+import cardDeal01Ogg from '../assets/audio/card-deal-01.ogg'
+import cardDeal01Wav from '../assets/audio/card-deal-01.wav'
+import cardDeal02Ogg from '../assets/audio/card-deal-02.ogg'
+import cardDeal02Wav from '../assets/audio/card-deal-02.wav'
+import cardDeal03Ogg from '../assets/audio/card-deal-03.ogg'
+import cardDeal03Wav from '../assets/audio/card-deal-03.wav'
+import cardPlay01Ogg from '../assets/audio/card-play-01.ogg'
+import cardPlay01Wav from '../assets/audio/card-play-01.wav'
+import cardPlay02Ogg from '../assets/audio/card-play-02.ogg'
+import cardPlay02Wav from '../assets/audio/card-play-02.wav'
+import cardPlay03Ogg from '../assets/audio/card-play-03.ogg'
+import cardPlay03Wav from '../assets/audio/card-play-03.wav'
+import hakemSelectedOgg from '../assets/audio/hakem-selected.ogg'
+import hakemSelectedWav from '../assets/audio/hakem-selected.wav'
+import trumpSelectedOgg from '../assets/audio/trump-selected.ogg'
+import trumpSelectedWav from '../assets/audio/trump-selected.wav'
+import trumpCutOgg from '../assets/audio/trump-cut.ogg'
+import trumpCutWav from '../assets/audio/trump-cut.wav'
+import trickWonOgg from '../assets/audio/trick-won.ogg'
+import trickWonWav from '../assets/audio/trick-won.wav'
+import cardCollectOgg from '../assets/audio/card-collect.ogg'
+import cardCollectWav from '../assets/audio/card-collect.wav'
 
 export type SoundId =
   | 'cardDeal'
@@ -13,14 +38,19 @@ export type SoundId =
   | 'cardCollect'
 
 export interface SoundDef {
-  /** Howler src list; ogg first, wav fallback. */
+  /** Howler src list; ogg first, wav fallback (data: or blob: only). */
   src: string[]
   volume: number
   /** When true, AudioManager picks a random Howl from the variant list. */
   variants?: string[][]
 }
 
-const A = '/assets/audio'
+const deal01 = [cardDeal01Ogg, cardDeal01Wav]
+const deal02 = [cardDeal02Ogg, cardDeal02Wav]
+const deal03 = [cardDeal03Ogg, cardDeal03Wav]
+const play01 = [cardPlay01Ogg, cardPlay01Wav]
+const play02 = [cardPlay02Ogg, cardPlay02Wav]
+const play03 = [cardPlay03Ogg, cardPlay03Wav]
 
 export const AUDIO = {
   masterVolume: 0.75,
@@ -28,41 +58,33 @@ export const AUDIO = {
   sounds: {
     cardDeal: {
       volume: 0.4,
-      src: [`${A}/card-deal-01.ogg`, `${A}/card-deal-01.wav`],
-      variants: [
-        [`${A}/card-deal-01.ogg`, `${A}/card-deal-01.wav`],
-        [`${A}/card-deal-02.ogg`, `${A}/card-deal-02.wav`],
-        [`${A}/card-deal-03.ogg`, `${A}/card-deal-03.wav`],
-      ],
+      src: deal01,
+      variants: [deal01, deal02, deal03],
     },
     cardPlay: {
       volume: 0.55,
-      src: [`${A}/card-play-01.ogg`, `${A}/card-play-01.wav`],
-      variants: [
-        [`${A}/card-play-01.ogg`, `${A}/card-play-01.wav`],
-        [`${A}/card-play-02.ogg`, `${A}/card-play-02.wav`],
-        [`${A}/card-play-03.ogg`, `${A}/card-play-03.wav`],
-      ],
+      src: play01,
+      variants: [play01, play02, play03],
     },
     hakemSelected: {
       volume: 0.5,
-      src: [`${A}/hakem-selected.ogg`, `${A}/hakem-selected.wav`],
+      src: [hakemSelectedOgg, hakemSelectedWav],
     },
     trumpSelected: {
       volume: 0.5,
-      src: [`${A}/trump-selected.ogg`, `${A}/trump-selected.wav`],
+      src: [trumpSelectedOgg, trumpSelectedWav],
     },
     trumpCut: {
       volume: 0.65,
-      src: [`${A}/trump-cut.ogg`, `${A}/trump-cut.wav`],
+      src: [trumpCutOgg, trumpCutWav],
     },
     trickWon: {
       volume: 0.55,
-      src: [`${A}/trick-won.ogg`, `${A}/trick-won.wav`],
+      src: [trickWonOgg, trickWonWav],
     },
     cardCollect: {
       volume: 0.45,
-      src: [`${A}/card-collect.ogg`, `${A}/card-collect.wav`],
+      src: [cardCollectOgg, cardCollectWav],
     },
   } satisfies Record<SoundId, SoundDef>,
 
@@ -79,7 +101,11 @@ export const AUDIO = {
   },
 } as const
 
-/** Required production filenames (replace anytime; keep these names). */
+/**
+ * Required filenames under frontend/src/assets/audio/ (and mirrored under
+ * frontend/public/assets/audio/ for replace-in-place workflows).
+ * Replace anytime; keep these names; rebuild to pick up changes.
+ */
 export const AUDIO_ASSET_FILES = [
   'card-deal-01.wav', 'card-deal-01.ogg',
   'card-deal-02.wav', 'card-deal-02.ogg',

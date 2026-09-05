@@ -273,7 +273,7 @@ below. 7. Commit the fix.
     WS ROOM snapshots, and leaderboard so peers render the correct face.
     Keep frontend AVATAR_STYLES/AVATAR_SEEDS in sync with backend allow-lists.
 
-### Gameplay audio / ADR-0019 (2026-09-05)
+### Gameplay audio / ADR-0019 + ADR-0020 (2026-09-05)
 
 15. **Howler must stay behind AudioManager**: presentation components must
     never import howler or construct Audio/Howl. Wire SFX to WS EVENTS +
@@ -284,3 +284,9 @@ below. 7. Commit the fix.
     try/catch; missing assets degrade to silence. Mute is localStorage only.
 17. **CARD_PLAYED timing is table impact**: delay by ANIM.cardPlayMs; never
     play on card select/tap. Collect SFX starts after ANIM.trickWinnerMs.
+18. **Download manager opening instead of SFX play**: MIME and file bodies were
+    fine; Internet Download Manager (and similar) intercept Howler network
+    fetches of `/assets/audio/*.ogg|wav` and force downloads. Fix: Vite-import
+    SFX from `src/assets/audio/`, inline as `data:` URLs (`assetsInlineLimit`),
+    set Howl `format: ['ogg','wav']` (ADR-0020). Never point Howl at bare
+    public audio URLs. Tip: users can also exclude the site from IDM.

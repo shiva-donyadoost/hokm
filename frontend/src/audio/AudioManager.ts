@@ -1,4 +1,4 @@
-import { Howl, Howler } from 'howler'
+mport { Howl, Howler } from 'howler'
 import { AUDIO, type SoundId, type SoundDef } from './audioConfig'
 import { diagWarn, diagInfo } from '../diagnostics/clientLog'
 
@@ -55,6 +55,8 @@ class AudioManagerImpl {
   private makeHowl(src: string[], volume: number): Howl {
     return new Howl({
       src,
+      // Required for data: URLs (no file extension for Howler to sniff).
+      format: ['ogg', 'wav'],
       volume: volume * this.master,
       preload: true,
       html5: false,
