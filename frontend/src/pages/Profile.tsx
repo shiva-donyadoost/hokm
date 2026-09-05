@@ -3,16 +3,29 @@ import { Link } from 'react-router-dom'
 import { api, type StatsEntry } from '../api/client'
 import { useAuth } from '../state/auth'
 import { PlayerAvatar, avatarSeed } from '../components/PlayerAvatar'
+import { AvatarPicker } from '../components/AvatarPicker'
+import { AVATAR_SEEDS } from '../components/avatarSeeds'
 import { Header } from './Rooms'
 
 export function Profile() {
   const user = useAuth((s) => s.user)
   const loadProfile = useAuth((s) => s.loadProfile)
+  const updateAvatar = useAuth((s) => s.updateAvatar)
+  const loading = useAuth((s) => s.loading)
+  const error = useAuth((s) => s.error)
   const [stats, setStats] = useState<StatsEntry | null>(null)
+  const [picked, setPicked] = useState('')
+  const [savedMsg, setSavedMsg] = useState('')
 
   useEffect(() => {
     void loadProfile()
   }, [loadProfile])
+
+  useEffect(() => {
+    if (!user) return
+    const current = (user.avatar_seed || '').trim()
+    setPicked(current || AVATAR_SEEDS[0])
+  }, [user])
 
   useEffect(() => {
     let live = true
@@ -35,18 +48,46 @@ export function Profile() {
 
   const played = stats?.games_played ?? 0
   const winRate = played > 0 ? Math.round(((stats?.wins ?? 0) / played) * 100) : 0
+  const dirty = picked !== (user.avatar_seed || '')
 
   return (
     <div className="min-h-dvh bg-slate-950 p-4 max-w-lg mx-auto">
       <Header title="Profile" />
       <section className="card">
         <div className="flex items-center gap-4 mb-4">
-          <PlayerAvatar seed={avatarSeed(user.id, user.username)} name={user.username} size="lg" />
+          <PlayerAvatar
+            seed={avatarSeed(user.id, user.username, picked || user.avatar_seed)}
+            name={user.username}
+            size="lg"
+          />
           <div>
             <p className="text-lg font-bold">{user.username}</p>
             <p className="text-sm text-slate-400">{user.email}</p>
           </div>
         </div>
+
+        <div className="mb-4">
+          <AvatarPicker value={picked} onChange={setPicked} label="Change avatar" />
+          <button
+            type="button"
+            className="btn-primary mt-3 w-full"
+            disabled={loading || !dirty || !picked}
+            onClick={async () => {
+              setSavedMsg('')
+              try {
+                await updateAvatar(picked)
+                setSavedMsg('Avatar saved')
+              } catch {
+                /* store error */
+              }
+            }}
+          >
+            {loading ? 'Saving...' : 'Save avatar'}
+          </button>
+          {error ? <p className="text-rose-400 text-sm mt-2">{error}</p> : null}
+          {savedMsg ? <p className="text-teal-400 text-sm mt-2">{savedMsg}</p> : null}
+        </div>
+
         <dl className="text-sm grid grid-cols-2 gap-2">
           <dt className="text-slate-500">Member since</dt>
           <dd>{new Date(user.created_at).toLocaleDateString()}</dd>

@@ -7,10 +7,11 @@ interface AuthState {
   booting: boolean
   error: string | null
   login: (username: string, password: string) => Promise<void>
-  register: (username: string, email: string, password: string) => Promise<void>
+  register: (username: string, email: string, password: string, avatarSeed: string) => Promise<void>
   logout: () => void
   boot: () => Promise<void>
   loadProfile: () => Promise<void>
+  updateAvatar: (avatarSeed: string) => Promise<void>
 }
 
 export const useAuth = create<AuthState>((set) => ({
@@ -31,10 +32,10 @@ export const useAuth = create<AuthState>((set) => ({
     }
   },
 
-  register: async (username, email, password) => {
+  register: async (username, email, password, avatarSeed) => {
     set({ loading: true, error: null })
     try {
-      const res = await api.register(username, email, password)
+      const res = await api.register(username, email, password, avatarSeed)
       setTokens(res.tokens.access_token, res.tokens.refresh_token)
       set({ user: res.user, loading: false, booting: false })
     } catch (e) {
@@ -81,6 +82,18 @@ export const useAuth = create<AuthState>((set) => ({
         clearTokens()
         set({ user: null })
       }
+    }
+  },
+
+  updateAvatar: async (avatarSeed) => {
+    set({ loading: true, error: null })
+    try {
+      await ensureFreshAccess()
+      const res = await api.updateMe(avatarSeed)
+      set({ user: res.user, loading: false })
+    } catch (e) {
+      set({ loading: false, error: e instanceof Error ? e.message : 'avatar update failed' })
+      throw e
     }
   },
 }))

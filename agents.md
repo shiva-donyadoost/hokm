@@ -254,3 +254,12 @@ below. 7. Commit the fix.
 23. Prefer CDN avatar SVG with stable user_id seed and initials fallback.
 24. When patching Windows sources match CRLF; LF-only search fails.
 25. Docker go mod download TLS timeout to proxy.golang.org: set GOPROXY=https://goproxy.cn,direct in the Go Dockerfile build stage (this network). Retry without --no-cache first; only then use a mirror.
+### Selectable avatars / ADR-0017 (2026-09-05)
+
+26. **Avatar choice must be server-persisted and whitelisted**: client-only
+    DiceBear seeds (localStorage / hash of username) do not show for other
+    players and accept arbitrary strings. Store `users.avatar_seed`, validate
+    against a curated gallery on register and PATCH /api/me, copy the seed onto
+    `room.Member` at join/create, and call `UpdateMemberAvatar` on change so WS
+    ROOM snapshots update. Legacy empty seed keeps ADR-0015 user_id fallback.
+    Keep frontend `AVATAR_SEEDS` and backend `AllowedAvatarSeeds` in sync.

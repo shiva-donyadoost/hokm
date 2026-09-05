@@ -41,6 +41,7 @@ type ScoreStore interface {
 type Entry struct {
 	UserID      string    `json:"user_id"`
 	Username    string    `json:"username"`
+	AvatarSeed  string    `json:"avatar_seed,omitempty"`
 	Rating      int       `json:"rating"`
 	GamesPlayed int       `json:"games_played"`
 	Wins        int       `json:"wins"`

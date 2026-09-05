@@ -45,6 +45,7 @@ func NewServer(users *app.UserService, tokens *auth.TokenManager, rooms *room.Ma
 	s.mux.Handle("POST /api/auth/login", s.limit(http.HandlerFunc(s.handleLogin)))
 	s.mux.Handle("POST /api/auth/refresh", s.limit(http.HandlerFunc(s.handleRefresh)))
 	s.mux.Handle("GET /api/me", s.RequireAuth(http.HandlerFunc(s.handleMe)))
+	s.mux.Handle("PATCH /api/me", s.RequireAuth(http.HandlerFunc(s.handleUpdateMe)))
 
 	// Rooms (Phase 5).
 	s.mux.Handle("POST /api/rooms", s.RequireAuth(http.HandlerFunc(s.handleCreateRoom)))
@@ -151,10 +152,16 @@ func (s *Server) limit(next http.Handler) http.Handler {
 
 // usernameFor resolves the display name for a user id via the user service.
 func (s *Server) usernameFor(userID string) string {
+	name, _ := s.displayFor(userID)
+	return name
+}
+
+// displayFor returns username and avatar_seed for seating (ADR-0017).
+func (s *Server) displayFor(userID string) (username, avatarSeed string) {
 	if u, err := s.users.Profile(userID); err == nil {
-		return u.Username
+		return u.Username, u.AvatarSeed
 	}
-	return "player"
+	return "player", ""
 }
 
 // RoomCodeFromPath is a small helper for invite-link resolution.

@@ -147,3 +147,53 @@ func TestRequireAuth(t *testing.T) {
 		t.Fatalf("garbage-token status = %d, want 401", rec2.Code)
 	}
 }
+
+func TestAvatarSeedFlow(t *testing.T) {
+	s := newTestServer(t)
+	rec := postJSON(t, s, "/api/auth/register", map[string]string{
+		"username": "avatar_user", "email": "av@example.com", "password": "s3curePass!", "avatar_seed": "panda",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("register status = %d: %s", rec.Code, rec.Body.String())
+	}
+	var reg struct {
+		User struct {
+			AvatarSeed string `json:"avatar_seed"`
+		} `json:"user"`
+		Tokens struct {
+			AccessToken string `json:"access_token"`
+		} `json:"tokens"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &reg)
+	if reg.User.AvatarSeed != "panda" {
+		t.Fatalf("avatar_seed = %q", reg.User.AvatarSeed)
+	}
+
+	// Bad seed rejected.
+	rec = postJSON(t, s, "/api/auth/register", map[string]string{
+		"username": "badseed", "email": "bad@example.com", "password": "s3curePass!", "avatar_seed": "nope",
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad seed status = %d, want 422", rec.Code)
+	}
+
+	// PATCH /api/me
+	body, _ := json.Marshal(map[string]string{"avatar_seed": "ember"})
+	req := httptest.NewRequest(http.MethodPatch, "/api/me", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+reg.Tokens.AccessToken)
+	rec2 := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec2, req)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("patch me status = %d: %s", rec2.Code, rec2.Body.String())
+	}
+	var me struct {
+		User struct {
+			AvatarSeed string `json:"avatar_seed"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(rec2.Body.Bytes(), &me)
+	if me.User.AvatarSeed != "ember" {
+		t.Fatalf("patched avatar_seed = %q", me.User.AvatarSeed)
+	}
+}

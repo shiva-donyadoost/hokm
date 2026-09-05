@@ -95,8 +95,8 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		GameSpeed:   req.GameSpeed,
 		ChatEnabled: chatEnabled,
 	}
-	username := s.usernameFor(uid)
-	rm, err := s.rooms.Create(uid, username, req.Name, room.Visibility(req.Visibility), settings)
+	username, avatarSeed := s.displayFor(uid)
+	rm, err := s.rooms.Create(uid, username, avatarSeed, req.Name, room.Visibility(req.Visibility), settings)
 	if err != nil {
 		writeError(w, r, s.roomErr(err))
 		return
@@ -131,7 +131,8 @@ func (s *Server) handleJoinRoom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, apiError(http.StatusBadRequest, "bad_request", "invalid JSON body"))
 		return
 	}
-	rm, err := s.rooms.Join(req.Code, uid, s.usernameFor(uid))
+	username, avatarSeed := s.displayFor(uid)
+	rm, err := s.rooms.Join(req.Code, uid, username, avatarSeed)
 	if err != nil {
 		writeError(w, r, s.roomErr(err))
 		return

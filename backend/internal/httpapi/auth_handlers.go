@@ -44,9 +44,10 @@ func (s *Server) RequireAuth(next http.Handler) http.Handler {
 }
 
 type registerRequest struct {
-	Username string `json:"username"`
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Username   string `json:"username"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	AvatarSeed string `json:"avatar_seed"`
 }
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
@@ -55,7 +56,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, r, apiError(http.StatusBadRequest, "bad_request", "invalid JSON body"))
 		return
 	}
-	u, err := s.users.Register(req.Username, req.Email, req.Password)
+	u, err := s.users.Register(req.Username, req.Email, req.Password, req.AvatarSeed)
 	if err != nil {
 		writeError(w, r, s.mapAppError(err))
 		return
@@ -103,6 +104,32 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tokens": pair})
+}
+
+type updateMeRequest struct {
+	AvatarSeed string `json:"avatar_seed"`
+}
+
+func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
+	uid, ok := UserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, r, apiError(http.StatusUnauthorized, "unauthorized", "not authenticated"))
+		return
+	}
+	var req updateMeRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		writeError(w, r, apiError(http.StatusBadRequest, "bad_request", "invalid JSON body"))
+		return
+	}
+	u, err := s.users.UpdateAvatar(uid, req.AvatarSeed)
+	if err != nil {
+		writeError(w, r, s.mapAppError(err))
+		return
+	}
+	if s.rooms != nil {
+		s.rooms.UpdateMemberAvatar(uid, u.AvatarSeed)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"user": u})
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {

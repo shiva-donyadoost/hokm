@@ -63,3 +63,14 @@ func (s *UserStore) ByID(id string) (*app.User, error) {
 	cp := *u
 	return &cp, nil
 }
+
+func (s *UserStore) UpdateAvatarSeed(id, seed string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	u, ok := s.byID[id]
+	if !ok {
+		return app.ErrUserNotFound
+	}
+	u.AvatarSeed = seed
+	return nil
+}

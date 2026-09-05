@@ -1,10 +1,17 @@
 import { useMemo, useState } from 'react'
 
-/** ADR-0015: DiceBear HTTP API - lorelei, seed = user_id (else username). */
+/** ADR-0015/0017: DiceBear lorelei; prefer chosen avatar_seed. */
 const DICEBEAR_STYLE = 'lorelei'
 const DICEBEAR_VERSION = '9.x'
 
-export function avatarSeed(userId?: string | null, username?: string | null): string {
+/** Prefer stored avatar_seed; else user_id; else username (ADR-0015/0017). */
+export function avatarSeed(
+  userId?: string | null,
+  username?: string | null,
+  chosen?: string | null,
+): string {
+  const c = (chosen ?? '').trim()
+  if (c) return c
   const id = (userId ?? '').trim()
   if (id) return id
   return (username ?? '').trim()

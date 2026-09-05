@@ -16,6 +16,7 @@ type User struct {
 	Username     string    `json:"username"`
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"`
+	AvatarSeed   string    `json:"avatar_seed,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	IsGuest      bool      `json:"is_guest"`
 }
@@ -25,6 +26,7 @@ type UserRepo interface {
 	Create(u *User) error
 	ByUsername(username string) (*User, error)
 	ByID(id string) (*User, error)
+	UpdateAvatarSeed(id, seed string) error
 }
 
 var (
@@ -58,9 +60,13 @@ func NewUserService(repo UserRepo, tokens *auth.TokenManager, refresh auth.Refre
 }
 
 // Register validates input, hashes the password, and persists the user.
-func (s *UserService) Register(username, email, password string) (*User, error) {
+func (s *UserService) Register(username, email, password, avatarSeed string) (*User, error) {
 	username = strings.ToLower(strings.TrimSpace(username))
 	email = strings.ToLower(strings.TrimSpace(email))
+	seed, err := ValidateAvatarSeed(avatarSeed)
+	if err != nil {
+		return nil, err
+	}
 	if !usernameRe.MatchString(username) {
 		return nil, fmt.Errorf("%w: username must be 3-24 chars of letters, digits or underscore", ErrValidation)
 	}
@@ -82,6 +88,7 @@ func (s *UserService) Register(username, email, password string) (*User, error) 
 		Username:     username,
 		Email:        email,
 		PasswordHash: hash,
+		AvatarSeed:   seed,
 		CreatedAt:    time.Now().UTC(),
 	}
 	if err := s.repo.Create(u); err != nil {
@@ -120,6 +127,26 @@ func (s *UserService) Refresh(token string) (*TokenPair, error) {
 		return nil, err
 	}
 	return pair, nil
+}
+
+// UpdateAvatar persists a whitelisted avatar seed for the user.
+func (s *UserService) UpdateAvatar(userID, avatarSeed string) (*User, error) {
+	seed, err := ValidateAvatarSeed(avatarSeed)
+	if err != nil {
+		return nil, err
+	}
+	if seed == "" {
+		return nil, fmt.Errorf("%w: avatar_seed is required", ErrValidation)
+	}
+	u, err := s.repo.ByID(userID)
+	if err != nil {
+		return nil, ErrUserNotFound
+	}
+	if err := s.repo.UpdateAvatarSeed(userID, seed); err != nil {
+		return nil, err
+	}
+	u.AvatarSeed = seed
+	return u, nil
 }
 
 // Profile returns the public profile of a user.

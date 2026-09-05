@@ -263,7 +263,7 @@ function LobbyTeams({
       >
         <div className="flex items-center gap-2 min-w-0">
           {m ? (
-            <PlayerAvatar seed={avatarSeed(m.user_id, m.username)} name={m.username} size="sm" />
+            <PlayerAvatar seed={avatarSeed(m.user_id, m.username, m.avatar_seed)} name={m.username} size="sm" />
           ) : (
             <div className="w-7 h-7 rounded-full bg-slate-700/60 border border-dashed border-slate-600 shrink-0" aria-hidden />
           )}

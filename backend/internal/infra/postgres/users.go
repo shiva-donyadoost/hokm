@@ -29,23 +29,27 @@ func NewUserStore(pool *pgxpool.Pool) *UserStore { return &UserStore{pool: pool}
 
 func scanUser(row pgx.Row) (*app.User, error) {
 	var u app.User
-	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.IsGuest, &u.CreatedAt)
+	var avatar *string
+	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.IsGuest, &u.CreatedAt, &avatar)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, app.ErrUserNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("postgres: scan user: %w", err)
 	}
+	if avatar != nil {
+		u.AvatarSeed = *avatar
+	}
 	return &u, nil
 }
 
-const userCols = `id, username, email, password_hash, is_guest, created_at`
+const userCols = `id, username, email, password_hash, is_guest, created_at, avatar_seed`
 
 func (s *UserStore) Create(u *app.User) error {
 	_, err := s.pool.Exec(context.Background(),
-		`INSERT INTO users (id, username, email, password_hash, is_guest, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
-		u.ID, u.Username, u.Email, u.PasswordHash, u.IsGuest, u.CreatedAt,
+		`INSERT INTO users (id, username, email, password_hash, is_guest, created_at, avatar_seed)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		u.ID, u.Username, u.Email, u.PasswordHash, u.IsGuest, u.CreatedAt, nullIfEmpty(u.AvatarSeed),
 	)
 	if err != nil {
 		// Unique violation → translate to domain errors.
@@ -120,4 +124,23 @@ func (s *RefreshStore) Consume(hash string) (string, error) {
 		return "", fmt.Errorf("postgres: consume refresh commit: %w", err)
 	}
 	return userID, nil
+}
+
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+func (s *UserStore) UpdateAvatarSeed(id, seed string) error {
+	tag, err := s.pool.Exec(context.Background(),
+		`UPDATE users SET avatar_seed = $2 WHERE id = $1`, id, seed)
+	if err != nil {
+		return fmt.Errorf("postgres: update avatar_seed: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return app.ErrUserNotFound
+	}
+	return nil
 }

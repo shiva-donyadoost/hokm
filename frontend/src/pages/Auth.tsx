@@ -2,6 +2,8 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../state/auth'
+import { AvatarPicker } from '../components/AvatarPicker'
+import { AVATAR_SEEDS } from '../components/avatarSeeds'
 
 export function Login() {
   const login = useAuth((s) => s.login)
@@ -65,6 +67,7 @@ export function Register() {
   const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [avatarSeed, setAvatarSeed] = useState<string>(AVATAR_SEEDS[0])
 
   return (
     <AuthShell title="Create account" subtitle="Join the table">
@@ -73,13 +76,14 @@ export function Register() {
         onSubmit={async (e) => {
           e.preventDefault()
           try {
-            await register(username, email, password)
+            await register(username, email, password, avatarSeed)
             navigate('/rooms')
           } catch {
             /* error shown by store */
           }
         }}
       >
+        <AvatarPicker value={avatarSeed} onChange={setAvatarSeed} label="Pick an avatar" />
         <input
           className="input"
           placeholder="Username (3-24 chars)"
@@ -107,7 +111,7 @@ export function Register() {
           required
         />
         {error ? <p className="text-rose-400 text-sm">{error}</p> : null}
-        <button className="btn-primary" disabled={loading}>
+        <button className="btn-primary" disabled={loading || !avatarSeed}>
           {loading ? 'Creating...' : 'Create account'}
         </button>
       </form>
@@ -132,7 +136,7 @@ export function AuthShell({
 }) {
   return (
     <div className="min-h-dvh flex items-center justify-center bg-gradient-to-b from-table-900 to-slate-950 p-4">
-      <div className="w-full max-w-sm bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
+      <div className="w-full max-w-md bg-slate-900/80 border border-slate-800 rounded-2xl p-6">
         <h1 className="text-3xl font-black tracking-tight mb-1">
           HOKM<span className="text-teal-400">.</span>
         </h1>
