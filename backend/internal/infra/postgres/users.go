@@ -30,7 +30,8 @@ func NewUserStore(pool *pgxpool.Pool) *UserStore { return &UserStore{pool: pool}
 func scanUser(row pgx.Row) (*app.User, error) {
 	var u app.User
 	var avatar *string
-	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.IsGuest, &u.CreatedAt, &avatar)
+	var style *string
+	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &u.IsGuest, &u.CreatedAt, &avatar, &style)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, app.ErrUserNotFound
 	}
@@ -40,16 +41,19 @@ func scanUser(row pgx.Row) (*app.User, error) {
 	if avatar != nil {
 		u.AvatarSeed = *avatar
 	}
+	if style != nil {
+		u.AvatarStyle = *style
+	}
 	return &u, nil
 }
 
-const userCols = `id, username, email, password_hash, is_guest, created_at, avatar_seed`
+const userCols = `id, username, email, password_hash, is_guest, created_at, avatar_seed, avatar_style`
 
 func (s *UserStore) Create(u *app.User) error {
 	_, err := s.pool.Exec(context.Background(),
-		`INSERT INTO users (id, username, email, password_hash, is_guest, created_at, avatar_seed)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		u.ID, u.Username, u.Email, u.PasswordHash, u.IsGuest, u.CreatedAt, nullIfEmpty(u.AvatarSeed),
+		`INSERT INTO users (id, username, email, password_hash, is_guest, created_at, avatar_seed, avatar_style)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		u.ID, u.Username, u.Email, u.PasswordHash, u.IsGuest, u.CreatedAt, nullIfEmpty(u.AvatarSeed), nullIfEmpty(u.AvatarStyle),
 	)
 	if err != nil {
 		// Unique violation → translate to domain errors.
@@ -133,11 +137,11 @@ func nullIfEmpty(s string) any {
 	return s
 }
 
-func (s *UserStore) UpdateAvatarSeed(id, seed string) error {
+func (s *UserStore) UpdateAvatar(id, seed, style string) error {
 	tag, err := s.pool.Exec(context.Background(),
-		`UPDATE users SET avatar_seed = $2 WHERE id = $1`, id, seed)
+		`UPDATE users SET avatar_seed = $2, avatar_style = $3 WHERE id = $1`, id, seed, style)
 	if err != nil {
-		return fmt.Errorf("postgres: update avatar_seed: %w", err)
+		return fmt.Errorf("postgres: update avatar: %w", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return app.ErrUserNotFound

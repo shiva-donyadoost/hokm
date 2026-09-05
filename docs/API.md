@@ -21,10 +21,11 @@ client should POST `/api/auth/refresh`.
 
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| POST | `/api/auth/register` | `{username, email, password}` | 201 → `{user, tokens}`; username 3–24 `[a-zA-Z0-9_]`, password 8–128 |
+| POST | `/api/auth/register` | `{username, email, password, avatar_seed?, avatar_style?}` | 201 → `{user, tokens}`; username 3–24 `[a-zA-Z0-9_]`, password 8–128; avatar fields whitelisted (ADR-0018) |
 | POST | `/api/auth/login` | `{username, password}` | 200 → `{user, tokens}`; identical 401 for unknown user / wrong password |
 | POST | `/api/auth/refresh` | `{refresh_token}` | rotates; old token single-use |
 | GET | `/api/me` | — | current profile |
+| PATCH | `/api/me` | `{avatar_seed, avatar_style}` | update curated DiceBear style+seed (ADR-0018) |
 
 ## Rooms
 

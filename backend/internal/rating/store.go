@@ -42,6 +42,7 @@ type Entry struct {
 	UserID      string    `json:"user_id"`
 	Username    string    `json:"username"`
 	AvatarSeed  string    `json:"avatar_seed,omitempty"`
+	AvatarStyle string    `json:"avatar_style,omitempty"`
 	Rating      int       `json:"rating"`
 	GamesPlayed int       `json:"games_played"`
 	Wins        int       `json:"wins"`

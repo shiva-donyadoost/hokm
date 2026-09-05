@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
+import { normalizeAvatarStyle } from './avatarSeeds'
 
-/** ADR-0015/0017: DiceBear lorelei; prefer chosen avatar_seed. */
-const DICEBEAR_STYLE = 'lorelei'
+/** ADR-0015/0017/0018: DiceBear lorelei or avataaars; prefer chosen seed. */
 const DICEBEAR_VERSION = '9.x'
 
 /** Prefer stored avatar_seed; else user_id; else username (ADR-0015/0017). */
@@ -17,9 +17,10 @@ export function avatarSeed(
   return (username ?? '').trim()
 }
 
-export function dicebearUrl(seed: string, size = 64): string {
+export function dicebearUrl(seed: string, size = 64, style?: string | null): string {
+  const st = normalizeAvatarStyle(style)
   const q = encodeURIComponent(seed || 'player')
-  return `https://api.dicebear.com/${DICEBEAR_VERSION}/${DICEBEAR_STYLE}/svg?seed=${q}&size=${size}`
+  return `https://api.dicebear.com/${DICEBEAR_VERSION}/${st}/svg?seed=${q}&size=${size}`
 }
 
 type AvatarSize = 'sm' | 'md' | 'lg'
@@ -41,17 +42,21 @@ export function PlayerAvatar({
   name = '',
   size = 'md',
   className = '',
+  style,
 }: {
   /** Stable DiceBear seed (prefer user_id). */
   seed: string
   name?: string
   size?: AvatarSize
   className?: string
+  /** DiceBear style; empty/legacy => lorelei (ADR-0018). */
+  style?: string | null
 }) {
   const [failed, setFailed] = useState(false)
   const trimmed = seed.trim()
   const initials = useMemo(() => initialsOf(name, trimmed), [name, trimmed])
   const showImg = Boolean(trimmed) && !failed
+  const resolvedStyle = normalizeAvatarStyle(style)
 
   if (!showImg) {
     return (
@@ -67,7 +72,7 @@ export function PlayerAvatar({
 
   return (
     <img
-      src={dicebearUrl(trimmed)}
+      src={dicebearUrl(trimmed, 64, resolvedStyle)}
       alt=""
       title={name || undefined}
       className={`${SIZE_CLASS[size]} rounded-full bg-slate-700 object-cover shrink-0 ${className}`}

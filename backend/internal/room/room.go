@@ -90,6 +90,7 @@ type Member struct {
 	UserID       string `json:"user_id"`
 	Username     string `json:"username"`
 	AvatarSeed   string `json:"avatar_seed,omitempty"`
+	AvatarStyle  string `json:"avatar_style,omitempty"`
 	Seat         int    `json:"seat"`
 	Ready        bool   `json:"ready"`
 	IsHost       bool   `json:"is_host"`
@@ -162,7 +163,7 @@ func (m *Manager) notify(r *Room) {
 }
 
 // Create makes a new room hosted by the given user.
-func (m *Manager) Create(hostID, hostName, avatarSeed, name string, visibility Visibility, settings RoomSettings) (Room, error) {
+func (m *Manager) Create(hostID, hostName, avatarSeed, avatarStyle, name string, visibility Visibility, settings RoomSettings) (Room, error) {
 	name = strings.TrimSpace(name)
 	if l := len(name); l < 2 || l > 40 {
 		return Room{}, ErrInvalidName
@@ -191,7 +192,7 @@ func (m *Manager) Create(hostID, hostName, avatarSeed, name string, visibility V
 		GameSpeed:   settings.GameSpeed,
 		ChatEnabled: settings.ChatEnabled,
 		Members: []Member{{
-			UserID: hostID, Username: hostName, AvatarSeed: avatarSeed, Seat: 0, Ready: true, IsHost: true,
+			UserID: hostID, Username: hostName, AvatarSeed: avatarSeed, AvatarStyle: avatarStyle, Seat: 0, Ready: true, IsHost: true,
 		}},
 	}
 	m.rooms[r.ID] = r
@@ -201,28 +202,28 @@ func (m *Manager) Create(hostID, hostName, avatarSeed, name string, visibility V
 }
 
 // Join seats the user in the room with the given code.
-func (m *Manager) Join(code, userID, username, avatarSeed string) (Room, error) {
+func (m *Manager) Join(code, userID, username, avatarSeed, avatarStyle string) (Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	id, ok := m.byCode[strings.ToUpper(strings.TrimSpace(code))]
 	if !ok {
 		return Room{}, ErrRoomNotFound
 	}
-	return m.joinLocked(m.rooms[id], userID, username, avatarSeed)
+	return m.joinLocked(m.rooms[id], userID, username, avatarSeed, avatarStyle)
 }
 
 // JoinByID joins via room id (e.g., invite links).
-func (m *Manager) JoinByID(roomID, userID, username, avatarSeed string) (Room, error) {
+func (m *Manager) JoinByID(roomID, userID, username, avatarSeed, avatarStyle string) (Room, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	r, ok := m.rooms[roomID]
 	if !ok {
 		return Room{}, ErrRoomNotFound
 	}
-	return m.joinLocked(r, userID, username, avatarSeed)
+	return m.joinLocked(r, userID, username, avatarSeed, avatarStyle)
 }
 
-func (m *Manager) joinLocked(r *Room, userID, username, avatarSeed string) (Room, error) {
+func (m *Manager) joinLocked(r *Room, userID, username, avatarSeed, avatarStyle string) (Room, error) {
 	if r.Status != "lobby" {
 		return Room{}, ErrGameInProgress
 	}
@@ -241,7 +242,7 @@ func (m *Manager) joinLocked(r *Room, userID, username, avatarSeed string) (Room
 		seat++
 	}
 	r.Members = append(r.Members, Member{
-		UserID: userID, Username: username, AvatarSeed: avatarSeed, Seat: seat, Ready: false,
+		UserID: userID, Username: username, AvatarSeed: avatarSeed, AvatarStyle: avatarStyle, Seat: seat, Ready: false,
 	})
 	m.notify(r)
 	return r.clone(), nil
@@ -542,9 +543,9 @@ func (m *Manager) MoveSeat(roomID, hostID string, fromSeat, toSeat int) (Room, e
 	return r.clone(), nil
 }
 
-// UpdateMemberAvatar sets avatar_seed on every seat occupied by userID and
-// notifies subscribers (ADR-0017).
-func (m *Manager) UpdateMemberAvatar(userID, avatarSeed string) {
+// UpdateMemberAvatar sets avatar style+seed on every seat occupied by userID
+// and notifies subscribers (ADR-0017/0018).
+func (m *Manager) UpdateMemberAvatar(userID, avatarSeed, avatarStyle string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, r := range m.rooms {
@@ -552,6 +553,7 @@ func (m *Manager) UpdateMemberAvatar(userID, avatarSeed string) {
 		for i := range r.Members {
 			if r.Members[i].UserID == userID {
 				r.Members[i].AvatarSeed = avatarSeed
+				r.Members[i].AvatarStyle = avatarStyle
 				changed = true
 			}
 		}

@@ -263,3 +263,13 @@ below. 7. Commit the fix.
     `room.Member` at join/create, and call `UpdateMemberAvatar` on change so WS
     ROOM snapshots update. Legacy empty seed keeps ADR-0015 user_id fallback.
     Keep frontend `AVATAR_SEEDS` and backend `AllowedAvatarSeeds` in sync.
+
+### Avatar styles / ADR-0018 (2026-09-05)
+
+27. **Avatar style must travel with seed**: lorelei and avataaars share the
+    same DiceBear CDN and seed gallery, but the URL path differs by style.
+    Persist `users.avatar_style` (default lorelei for legacy seed-only rows),
+    validate style+seed together server-side, and include style on Room Member,
+    WS ROOM snapshots, and leaderboard so peers render the correct face.
+    Keep frontend AVATAR_STYLES/AVATAR_SEEDS in sync with backend allow-lists.
+

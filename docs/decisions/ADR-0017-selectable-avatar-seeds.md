@@ -42,3 +42,8 @@ table seats, lobby, leaderboard, and profile.
 - Existing users keep current faces until they pick one in Profile.
 - Frontend AvatarPicker reused on Register and Profile.
 - AI seats keep empty avatar_seed and fall back to ai user_id seed.
+
+## Supersession note
+
+ADR-0018 adds avatar_style (lorelei + avataaars) while keeping this
+whitelist and persistence model. Lorelei-only is no longer required.

@@ -122,7 +122,7 @@ func (s *ScoreStore) ApplyMatch(rec rating.MatchRecord) error {
 func (s *ScoreStore) Leaderboard(n int) ([]rating.Entry, error) {
 	ctx := context.Background()
 	rows, err := s.pool.Query(ctx, `
-		SELECT u.id, u.username, COALESCE(u.avatar_seed, ''), s.rating, s.games_played, s.wins, s.losses,
+		SELECT u.id, u.username, COALESCE(u.avatar_seed, ''), COALESCE(u.avatar_style, ''), s.rating, s.games_played, s.wins, s.losses,
 		       s.rounds_won, s.rounds_lost, s.updated_at
 		FROM statistics s JOIN users u ON u.id = s.user_id
 		ORDER BY s.wins DESC, s.rating DESC, u.username ASC
@@ -134,7 +134,7 @@ func (s *ScoreStore) Leaderboard(n int) ([]rating.Entry, error) {
 	var out []rating.Entry
 	for rows.Next() {
 		var e rating.Entry
-		if err := rows.Scan(&e.UserID, &e.Username, &e.AvatarSeed, &e.Rating, &e.GamesPlayed,
+		if err := rows.Scan(&e.UserID, &e.Username, &e.AvatarSeed, &e.AvatarStyle, &e.Rating, &e.GamesPlayed,
 			&e.Wins, &e.Losses, &e.RoundsWon, &e.RoundsLost, &e.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("postgres: leaderboard scan: %w", err)
 		}
@@ -148,11 +148,11 @@ func (s *ScoreStore) StatsOf(userID string) (rating.Entry, error) {
 	ctx := context.Background()
 	var e rating.Entry
 	err := s.pool.QueryRow(ctx, `
-		SELECT u.id, u.username, COALESCE(u.avatar_seed, ''), s.rating, s.games_played, s.wins, s.losses,
+		SELECT u.id, u.username, COALESCE(u.avatar_seed, ''), COALESCE(u.avatar_style, ''), s.rating, s.games_played, s.wins, s.losses,
 		       s.rounds_won, s.rounds_lost, s.updated_at
 		FROM statistics s JOIN users u ON u.id = s.user_id
 		WHERE s.user_id = $1`, userID,
-	).Scan(&e.UserID, &e.Username, &e.AvatarSeed, &e.Rating, &e.GamesPlayed,
+	).Scan(&e.UserID, &e.Username, &e.AvatarSeed, &e.AvatarStyle, &e.Rating, &e.GamesPlayed,
 		&e.Wins, &e.Losses, &e.RoundsWon, &e.RoundsLost, &e.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return rating.Entry{UserID: userID, Rating: int(rating.StartingRating)}, nil

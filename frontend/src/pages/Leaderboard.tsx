@@ -32,7 +32,7 @@ export function Leaderboard() {
               <li key={e.user_id} className="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-3">
                   <span className="text-slate-500 w-6 text-right font-mono">{i + 1}</span>
-                  <PlayerAvatar seed={avatarSeed(e.user_id, e.username, e.avatar_seed)} name={e.username} size="sm" />
+                  <PlayerAvatar seed={avatarSeed(e.user_id, e.username, e.avatar_seed)} style={e.avatar_style} name={e.username} size="sm" />
                   <div>
                     <p className="font-semibold">{e.username || e.user_id}</p>
                     <p className="text-xs text-slate-400">

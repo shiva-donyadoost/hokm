@@ -4,7 +4,7 @@ import { api, type StatsEntry } from '../api/client'
 import { useAuth } from '../state/auth'
 import { PlayerAvatar, avatarSeed } from '../components/PlayerAvatar'
 import { AvatarPicker } from '../components/AvatarPicker'
-import { AVATAR_SEEDS } from '../components/avatarSeeds'
+import { AVATAR_SEEDS, DEFAULT_AVATAR_STYLE, normalizeAvatarStyle } from '../components/avatarSeeds'
 import { Header } from './Rooms'
 
 export function Profile() {
@@ -14,7 +14,8 @@ export function Profile() {
   const loading = useAuth((s) => s.loading)
   const error = useAuth((s) => s.error)
   const [stats, setStats] = useState<StatsEntry | null>(null)
-  const [picked, setPicked] = useState('')
+  const [pickedSeed, setPickedSeed] = useState('')
+  const [pickedStyle, setPickedStyle] = useState<string>(DEFAULT_AVATAR_STYLE)
   const [savedMsg, setSavedMsg] = useState('')
 
   useEffect(() => {
@@ -24,7 +25,8 @@ export function Profile() {
   useEffect(() => {
     if (!user) return
     const current = (user.avatar_seed || '').trim()
-    setPicked(current || AVATAR_SEEDS[0])
+    setPickedSeed(current || AVATAR_SEEDS[0])
+    setPickedStyle(normalizeAvatarStyle(user.avatar_style))
   }, [user])
 
   useEffect(() => {
@@ -48,7 +50,9 @@ export function Profile() {
 
   const played = stats?.games_played ?? 0
   const winRate = played > 0 ? Math.round(((stats?.wins ?? 0) / played) * 100) : 0
-  const dirty = picked !== (user.avatar_seed || '')
+  const dirty =
+    pickedSeed !== (user.avatar_seed || '') ||
+    pickedStyle !== normalizeAvatarStyle(user.avatar_style)
 
   return (
     <div className="min-h-dvh bg-slate-950 p-4 max-w-lg mx-auto">
@@ -56,7 +60,8 @@ export function Profile() {
       <section className="card">
         <div className="flex items-center gap-4 mb-4">
           <PlayerAvatar
-            seed={avatarSeed(user.id, user.username, picked || user.avatar_seed)}
+            seed={avatarSeed(user.id, user.username, pickedSeed || user.avatar_seed)}
+            style={pickedStyle || user.avatar_style}
             name={user.username}
             size="lg"
           />
@@ -67,15 +72,23 @@ export function Profile() {
         </div>
 
         <div className="mb-4">
-          <AvatarPicker value={picked} onChange={setPicked} label="Change avatar" />
+          <AvatarPicker
+            style={pickedStyle}
+            seed={pickedSeed}
+            onChange={(st, sd) => {
+              setPickedStyle(st)
+              setPickedSeed(sd)
+            }}
+            label="Change avatar"
+          />
           <button
             type="button"
             className="btn-primary mt-3 w-full"
-            disabled={loading || !dirty || !picked}
+            disabled={loading || !dirty || !pickedSeed}
             onClick={async () => {
               setSavedMsg('')
               try {
-                await updateAvatar(picked)
+                await updateAvatar(pickedSeed, pickedStyle)
                 setSavedMsg('Avatar saved')
               } catch {
                 /* store error */

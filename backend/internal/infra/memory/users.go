@@ -64,7 +64,7 @@ func (s *UserStore) ByID(id string) (*app.User, error) {
 	return &cp, nil
 }
 
-func (s *UserStore) UpdateAvatarSeed(id, seed string) error {
+func (s *UserStore) UpdateAvatar(id, seed, style string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	u, ok := s.byID[id]
@@ -72,5 +72,6 @@ func (s *UserStore) UpdateAvatarSeed(id, seed string) error {
 		return app.ErrUserNotFound
 	}
 	u.AvatarSeed = seed
+	u.AvatarStyle = style
 	return nil
 }

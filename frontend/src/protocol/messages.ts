@@ -49,6 +49,7 @@ export interface RoomMember {
   user_id: string
   username: string
   avatar_seed?: string
+  avatar_style?: string
   seat: number
   ready: boolean
   is_host: boolean

@@ -151,22 +151,24 @@ func TestRequireAuth(t *testing.T) {
 func TestAvatarSeedFlow(t *testing.T) {
 	s := newTestServer(t)
 	rec := postJSON(t, s, "/api/auth/register", map[string]string{
-		"username": "avatar_user", "email": "av@example.com", "password": "s3curePass!", "avatar_seed": "panda",
+		"username": "avatar_user", "email": "av@example.com", "password": "s3curePass!",
+		"avatar_seed": "panda", "avatar_style": "lorelei",
 	})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("register status = %d: %s", rec.Code, rec.Body.String())
 	}
 	var reg struct {
 		User struct {
-			AvatarSeed string `json:"avatar_seed"`
+			AvatarSeed  string `json:"avatar_seed"`
+			AvatarStyle string `json:"avatar_style"`
 		} `json:"user"`
 		Tokens struct {
 			AccessToken string `json:"access_token"`
 		} `json:"tokens"`
 	}
 	_ = json.Unmarshal(rec.Body.Bytes(), &reg)
-	if reg.User.AvatarSeed != "panda" {
-		t.Fatalf("avatar_seed = %q", reg.User.AvatarSeed)
+	if reg.User.AvatarSeed != "panda" || reg.User.AvatarStyle != "lorelei" {
+		t.Fatalf("avatar = %q/%q", reg.User.AvatarSeed, reg.User.AvatarStyle)
 	}
 
 	// Bad seed rejected.
@@ -177,8 +179,35 @@ func TestAvatarSeedFlow(t *testing.T) {
 		t.Fatalf("bad seed status = %d, want 422", rec.Code)
 	}
 
-	// PATCH /api/me
-	body, _ := json.Marshal(map[string]string{"avatar_seed": "ember"})
+	// Bad style rejected.
+	rec = postJSON(t, s, "/api/auth/register", map[string]string{
+		"username": "badstyle", "email": "badstyle@example.com", "password": "s3curePass!",
+		"avatar_seed": "fox", "avatar_style": "nope",
+	})
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("bad style status = %d, want 422", rec.Code)
+	}
+
+	// Seed without style defaults to lorelei.
+	rec = postJSON(t, s, "/api/auth/register", map[string]string{
+		"username": "legacy_style", "email": "leg@example.com", "password": "s3curePass!", "avatar_seed": "owl",
+	})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("legacy style register = %d: %s", rec.Code, rec.Body.String())
+	}
+	var leg struct {
+		User struct {
+			AvatarSeed  string `json:"avatar_seed"`
+			AvatarStyle string `json:"avatar_style"`
+		} `json:"user"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &leg)
+	if leg.User.AvatarSeed != "owl" || leg.User.AvatarStyle != "lorelei" {
+		t.Fatalf("legacy style = %q/%q", leg.User.AvatarSeed, leg.User.AvatarStyle)
+	}
+
+	// PATCH /api/me with avataaars
+	body, _ := json.Marshal(map[string]string{"avatar_seed": "ember", "avatar_style": "avataaars"})
 	req := httptest.NewRequest(http.MethodPatch, "/api/me", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+reg.Tokens.AccessToken)
@@ -189,11 +218,12 @@ func TestAvatarSeedFlow(t *testing.T) {
 	}
 	var me struct {
 		User struct {
-			AvatarSeed string `json:"avatar_seed"`
+			AvatarSeed  string `json:"avatar_seed"`
+			AvatarStyle string `json:"avatar_style"`
 		} `json:"user"`
 	}
 	_ = json.Unmarshal(rec2.Body.Bytes(), &me)
-	if me.User.AvatarSeed != "ember" {
-		t.Fatalf("patched avatar_seed = %q", me.User.AvatarSeed)
+	if me.User.AvatarSeed != "ember" || me.User.AvatarStyle != "avataaars" {
+		t.Fatalf("patched avatar = %q/%q", me.User.AvatarSeed, me.User.AvatarStyle)
 	}
 }

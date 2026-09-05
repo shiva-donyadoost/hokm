@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../state/auth'
 import { AvatarPicker } from '../components/AvatarPicker'
-import { AVATAR_SEEDS } from '../components/avatarSeeds'
+import { AVATAR_SEEDS, DEFAULT_AVATAR_STYLE } from '../components/avatarSeeds'
 
 export function Login() {
   const login = useAuth((s) => s.login)
@@ -68,6 +68,7 @@ export function Register() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [avatarSeed, setAvatarSeed] = useState<string>(AVATAR_SEEDS[0])
+  const [avatarStyle, setAvatarStyle] = useState<string>(DEFAULT_AVATAR_STYLE)
 
   return (
     <AuthShell title="Create account" subtitle="Join the table">
@@ -76,14 +77,22 @@ export function Register() {
         onSubmit={async (e) => {
           e.preventDefault()
           try {
-            await register(username, email, password, avatarSeed)
+            await register(username, email, password, avatarSeed, avatarStyle)
             navigate('/rooms')
           } catch {
             /* error shown by store */
           }
         }}
       >
-        <AvatarPicker value={avatarSeed} onChange={setAvatarSeed} label="Pick an avatar" />
+        <AvatarPicker
+          style={avatarStyle}
+          seed={avatarSeed}
+          onChange={(st, sd) => {
+            setAvatarStyle(st)
+            setAvatarSeed(sd)
+          }}
+          label="Pick an avatar"
+        />
         <input
           className="input"
           placeholder="Username (3-24 chars)"
@@ -111,7 +120,7 @@ export function Register() {
           required
         />
         {error ? <p className="text-rose-400 text-sm">{error}</p> : null}
-        <button className="btn-primary" disabled={loading || !avatarSeed}>
+        <button className="btn-primary" disabled={loading || !avatarSeed || !avatarStyle}>
           {loading ? 'Creating...' : 'Create account'}
         </button>
       </form>

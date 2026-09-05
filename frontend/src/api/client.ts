@@ -59,6 +59,7 @@ export interface User {
   username: string
   email: string
   avatar_seed?: string
+  avatar_style?: string
   created_at: string
   is_guest: boolean
 }
@@ -135,12 +136,13 @@ async function request<T>(
 }
 
 export const api = {
-  register: (username: string, email: string, password: string, avatar_seed: string) =>
+  register: (username: string, email: string, password: string, avatar_seed: string, avatar_style: string) =>
     request<{ user: User; tokens: TokenPair }>('POST', '/auth/register', {
       username,
       email,
       password,
       avatar_seed,
+      avatar_style,
     }),
   login: (username: string, password: string) =>
     request<{ user: User; tokens: TokenPair }>('POST', '/auth/login', {
@@ -148,8 +150,8 @@ export const api = {
       password,
     }),
   me: () => request<{ user: User }>('GET', '/me'),
-  updateMe: (avatar_seed: string) =>
-    request<{ user: User }>('PATCH', '/me', { avatar_seed }),
+  updateMe: (avatar_seed: string, avatar_style: string) =>
+    request<{ user: User }>('PATCH', '/me', { avatar_seed, avatar_style }),
   listRooms: () => request<{ rooms: Room[] }>('GET', '/rooms'),
   createRoom: (name: string, visibility: string, roundCount: number, gameSpeed: string, chatEnabled: boolean) =>
     request<{ room: Room }>('POST', '/rooms', {
@@ -184,6 +186,7 @@ export interface StatsEntry {
   user_id: string
   username: string
   avatar_seed?: string
+  avatar_style?: string
   rating: number
   games_played: number
   wins: number

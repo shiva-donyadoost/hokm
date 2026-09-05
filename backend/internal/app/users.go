@@ -17,6 +17,7 @@ type User struct {
 	Email        string    `json:"email"`
 	PasswordHash string    `json:"-"`
 	AvatarSeed   string    `json:"avatar_seed,omitempty"`
+	AvatarStyle  string    `json:"avatar_style,omitempty"`
 	CreatedAt    time.Time `json:"created_at"`
 	IsGuest      bool      `json:"is_guest"`
 }
@@ -26,7 +27,7 @@ type UserRepo interface {
 	Create(u *User) error
 	ByUsername(username string) (*User, error)
 	ByID(id string) (*User, error)
-	UpdateAvatarSeed(id, seed string) error
+	UpdateAvatar(id, seed, style string) error
 }
 
 var (
@@ -60,10 +61,10 @@ func NewUserService(repo UserRepo, tokens *auth.TokenManager, refresh auth.Refre
 }
 
 // Register validates input, hashes the password, and persists the user.
-func (s *UserService) Register(username, email, password, avatarSeed string) (*User, error) {
+func (s *UserService) Register(username, email, password, avatarSeed, avatarStyle string) (*User, error) {
 	username = strings.ToLower(strings.TrimSpace(username))
 	email = strings.ToLower(strings.TrimSpace(email))
-	seed, err := ValidateAvatarSeed(avatarSeed)
+	style, seed, err := ValidateAvatarChoice(avatarStyle, avatarSeed)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +90,7 @@ func (s *UserService) Register(username, email, password, avatarSeed string) (*U
 		Email:        email,
 		PasswordHash: hash,
 		AvatarSeed:   seed,
+		AvatarStyle:  style,
 		CreatedAt:    time.Now().UTC(),
 	}
 	if err := s.repo.Create(u); err != nil {
@@ -129,9 +131,9 @@ func (s *UserService) Refresh(token string) (*TokenPair, error) {
 	return pair, nil
 }
 
-// UpdateAvatar persists a whitelisted avatar seed for the user.
-func (s *UserService) UpdateAvatar(userID, avatarSeed string) (*User, error) {
-	seed, err := ValidateAvatarSeed(avatarSeed)
+// UpdateAvatar persists a whitelisted avatar style+seed for the user.
+func (s *UserService) UpdateAvatar(userID, avatarSeed, avatarStyle string) (*User, error) {
+	style, seed, err := ValidateAvatarChoice(avatarStyle, avatarSeed)
 	if err != nil {
 		return nil, err
 	}
@@ -142,10 +144,11 @@ func (s *UserService) UpdateAvatar(userID, avatarSeed string) (*User, error) {
 	if err != nil {
 		return nil, ErrUserNotFound
 	}
-	if err := s.repo.UpdateAvatarSeed(userID, seed); err != nil {
+	if err := s.repo.UpdateAvatar(userID, seed, style); err != nil {
 		return nil, err
 	}
 	u.AvatarSeed = seed
+	u.AvatarStyle = style
 	return u, nil
 }
 

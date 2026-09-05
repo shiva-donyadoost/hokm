@@ -13,7 +13,7 @@ func defaultSettings() RoomSettings {
 
 func TestCreateAndCodeLookup(t *testing.T) {
 	m := newTestManager()
-	r, err := m.Create("u1", "Alice", "", "Friday Night", Public, defaultSettings())
+	r, err := m.Create("u1", "Alice", "", "", "Friday Night", Public, defaultSettings())
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
@@ -34,9 +34,9 @@ func TestCreateAndCodeLookup(t *testing.T) {
 
 func TestJoinSeatAllocation(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
 	for i := 2; i <= 4; i++ {
-		r, err := m.Join(r.Code, string(rune('0'+i)), "P", "")
+		r, err := m.Join(r.Code, string(rune('0'+i)), "P", "", "")
 		if err != nil {
 			t.Fatalf("join %d: %v", i, err)
 		}
@@ -54,19 +54,19 @@ func TestJoinSeatAllocation(t *testing.T) {
 		seats[mem.Seat] = true
 	}
 	// Fifth join must fail.
-	if _, err := m.Join(r.Code, "u9", "Late", ""); !errors.Is(err, ErrRoomFull) {
+	if _, err := m.Join(r.Code, "u9", "Late", "", ""); !errors.Is(err, ErrRoomFull) {
 		t.Fatalf("want ErrRoomFull, got %v", err)
 	}
 	// Rejoin rejected.
-	if _, err := m.Join(r.Code, "u1", "Alice", ""); !errors.Is(err, ErrAlreadyInRoom) {
+	if _, err := m.Join(r.Code, "u1", "Alice", "", ""); !errors.Is(err, ErrAlreadyInRoom) {
 		t.Fatalf("want ErrAlreadyInRoom, got %v", err)
 	}
 }
 
 func TestLeaveTransfersHostAndDeletesEmpty(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
-	_, _ = m.Join(r.Code, "u2", "Bob", "")
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob", "", "")
 	_, err := m.Leave(r.ID, "u1")
 	if err != nil {
 		t.Fatalf("Leave: %v", err)
@@ -87,8 +87,8 @@ func TestLeaveTransfersHostAndDeletesEmpty(t *testing.T) {
 
 func TestReadyAndStart(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
-	_, _ = m.Join(r.Code, "u2", "Bob", "")
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob", "", "")
 	if _, err := m.SetReady(r.ID, "u2", true); err != nil {
 		t.Fatalf("SetReady: %v", err)
 	}
@@ -103,9 +103,9 @@ func TestReadyAndStart(t *testing.T) {
 
 func TestKickRules(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
-	_, _ = m.Join(r.Code, "u2", "Bob", "")
-	_, _ = m.Join(r.Code, "u3", "Cara", "")
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob", "", "")
+	_, _ = m.Join(r.Code, "u3", "Cara", "", "")
 
 	if _, err := m.Kick(r.ID, "u2", "u3"); !errors.Is(err, ErrNotHost) {
 		t.Fatalf("non-host kick: %v", err)
@@ -124,7 +124,7 @@ func TestKickRules(t *testing.T) {
 
 func TestAISlots(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Private, defaultSettings())
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Private, defaultSettings())
 	got, err := m.AddAI(r.ID, "u1", "hard", "Robot")
 	if err != nil {
 		t.Fatalf("AddAI: %v", err)
@@ -156,7 +156,7 @@ func TestAISlots(t *testing.T) {
 
 func TestFillEmptyWithAI(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
 	got, err := m.FillEmptyWithAI(r.ID, "u1")
 	if err != nil {
 		t.Fatalf("FillEmptyWithAI: %v", err)
@@ -189,8 +189,8 @@ func TestFillEmptyWithAI(t *testing.T) {
 
 func TestListPublicOnly(t *testing.T) {
 	m := newTestManager()
-	pub, _ := m.Create("u1", "A", "", "Public Room", Public, defaultSettings())
-	_, _ = m.Create("u2", "B", "", "Private Room", Private, defaultSettings())
+	pub, _ := m.Create("u1", "A", "", "", "Public Room", Public, defaultSettings())
+	_, _ = m.Create("u2", "B", "", "", "Private Room", Private, defaultSettings())
 	list := m.ListPublic()
 	if len(list) != 1 || list[0].ID != pub.ID {
 		t.Fatalf("public list = %+v", list)
@@ -201,8 +201,8 @@ func TestNotifierFires(t *testing.T) {
 	m := newTestManager()
 	updates := make(chan Room, 8)
 	m.SetNotifier(chanNotifier(updates))
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
-	_, _ = m.Join(r.Code, "u2", "Bob", "")
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob", "", "")
 	select {
 	case got := <-updates:
 		if got.HostID != "u1" {
@@ -221,7 +221,7 @@ func TestCodesUniqueAcrossManyRooms(t *testing.T) {
 	m := newTestManager()
 	seen := map[string]bool{}
 	for i := 0; i < 200; i++ {
-		r, err := m.Create("u", "A", "", "Room", Public, defaultSettings())
+		r, err := m.Create("u", "A", "", "", "Room", Public, defaultSettings())
 		if err != nil {
 			t.Fatalf("create %d: %v", i, err)
 		}
@@ -243,8 +243,8 @@ func seatOf(r Room, userID string) int {
 
 func TestMoveSeatSwapAndEmpty(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
-	_, _ = m.Join(r.Code, "u2", "Bob", "")
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob", "", "")
 
 	got, err := m.MoveSeat(r.ID, "u1", 0, 2)
 	if err != nil {
@@ -268,8 +268,8 @@ func TestMoveSeatSwapAndEmpty(t *testing.T) {
 
 func TestMoveSeatRejected(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
-	_, _ = m.Join(r.Code, "u2", "Bob", "")
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob", "", "")
 
 	if _, err := m.MoveSeat(r.ID, "u2", 1, 2); !errors.Is(err, ErrNotHost) {
 		t.Fatalf("non-host: %v", err)
@@ -291,8 +291,8 @@ func TestMoveSeatRejected(t *testing.T) {
 
 func TestDeleteLobbyOnly(t *testing.T) {
 	m := newTestManager()
-	r, _ := m.Create("u1", "Alice", "", "Room", Public, defaultSettings())
-	_, _ = m.Join(r.Code, "u2", "Bob", "")
+	r, _ := m.Create("u1", "Alice", "", "", "Room", Public, defaultSettings())
+	_, _ = m.Join(r.Code, "u2", "Bob", "", "")
 
 	if err := m.Delete(r.ID, "u2"); !errors.Is(err, ErrNotHost) {
 		t.Fatalf("non-host delete: %v", err)
@@ -304,7 +304,7 @@ func TestDeleteLobbyOnly(t *testing.T) {
 		t.Fatalf("deleted room still present: %v", err)
 	}
 
-	r2, _ := m.Create("u1", "Alice", "", "Match", Public, defaultSettings())
+	r2, _ := m.Create("u1", "Alice", "", "", "Match", Public, defaultSettings())
 	if err := m.MarkStarted(r2.ID); err != nil {
 		t.Fatalf("MarkStarted: %v", err)
 	}

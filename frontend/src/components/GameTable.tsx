@@ -415,6 +415,7 @@ export function GameTable({ room, view }: GameTableProps) {
           <div className="flex items-center gap-2 max-w-[90vw]">
             <PlayerAvatar
               seed={avatarSeed(self?.user_id ?? myId, self?.username, self?.avatar_seed)}
+              style={self?.avatar_style}
               name={self?.username ?? "you"}
               size="sm"
             />
@@ -567,6 +568,7 @@ function SeatPlate({ member, cardCount, isTurn, isHakem, deadline, tricks, hideH
     <div className="flex flex-col gap-1 items-center max-w-24 sm:max-w-36">
       <PlayerAvatar
         seed={avatarSeed(member?.user_id, member?.username, member?.avatar_seed)}
+        style={member?.avatar_style}
         name={member?.username ?? ""}
         size="sm"
       />
