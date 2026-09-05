@@ -1,4 +1,4 @@
-mport { Howl, Howler } from 'howler'
+import { Howl, Howler } from 'howler'
 import { AUDIO, type SoundId, type SoundDef } from './audioConfig'
 import { diagWarn, diagInfo } from '../diagnostics/clientLog'
 

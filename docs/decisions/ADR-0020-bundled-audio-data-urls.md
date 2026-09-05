@@ -1,4 +1,4 @@
- ADR-0020
+# ADR-0020
 
 Status: Accepted
 Date: 2026-09-05

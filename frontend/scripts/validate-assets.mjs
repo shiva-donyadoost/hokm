@@ -1,4 +1,4 @@
-/ Build-time asset validation (impliment.md): all 52 card faces + the
+// Build-time asset validation (impliment.md): all 52 card faces + the
 // card back must exist. Missing assets fail the build with a clear error
 // instead of rendering broken images at runtime.
 import { readdirSync } from 'node:fs'

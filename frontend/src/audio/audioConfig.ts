@@ -1,4 +1,4 @@
-mport { ANIM } from '../config'
+import { ANIM } from '../config'
 
 // Presentation-only audio configuration (ADR-0019 / ADR-0020).
 // SFX are Vite-imported from src/assets/audio and inlined as data: URLs
