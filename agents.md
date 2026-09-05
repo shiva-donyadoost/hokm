@@ -273,3 +273,14 @@ below. 7. Commit the fix.
     WS ROOM snapshots, and leaderboard so peers render the correct face.
     Keep frontend AVATAR_STYLES/AVATAR_SEEDS in sync with backend allow-lists.
 
+### Gameplay audio / ADR-0019 (2026-09-05)
+
+15. **Howler must stay behind AudioManager**: presentation components must
+    never import howler or construct Audio/Howl. Wire SFX to WS EVENTS +
+    SeatView transitions (CARD_DEALT from hand-length jumps; TRUMP_CUT
+    inferred when lead is non-trump and winner card is trump). Private
+    deal events are not public by design - do not invent deal payloads.
+16. **Audio failure must not break the table**: wrap play/load/unlock in
+    try/catch; missing assets degrade to silence. Mute is localStorage only.
+17. **CARD_PLAYED timing is table impact**: delay by ANIM.cardPlayMs; never
+    play on card select/tap. Collect SFX starts after ANIM.trickWinnerMs.

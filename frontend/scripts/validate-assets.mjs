@@ -27,3 +27,27 @@ if (missing.length > 0) {
   process.exit(1)
 }
 console.log(`card assets OK (${present.size} files validated)`)
+
+// Audio SFX (ADR-0019)
+const audioDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'assets', 'audio')
+const audioRequired = [
+  'card-deal-01.wav', 'card-deal-01.ogg',
+  'card-deal-02.wav', 'card-deal-02.ogg',
+  'card-deal-03.wav', 'card-deal-03.ogg',
+  'card-play-01.wav', 'card-play-01.ogg',
+  'card-play-02.wav', 'card-play-02.ogg',
+  'card-play-03.wav', 'card-play-03.ogg',
+  'hakem-selected.wav', 'hakem-selected.ogg',
+  'trump-selected.wav', 'trump-selected.ogg',
+  'trump-cut.wav', 'trump-cut.ogg',
+  'trick-won.wav', 'trick-won.ogg',
+  'card-collect.wav', 'card-collect.ogg',
+]
+const audioPresent = new Set(readdirSync(audioDir))
+const audioMissing = audioRequired.filter((f) => !audioPresent.has(f))
+if (audioMissing.length > 0) {
+  console.error('audio asset validation FAILED - missing ' + audioMissing.length + ' assets:')
+  for (const f of audioMissing) console.error('  ' + f)
+  process.exit(1)
+}
+console.log('audio assets OK (' + audioRequired.length + ' files validated)')

@@ -28,6 +28,8 @@ interface GameState {
   view: SeatView | null
   chat: ChatMessage[]
   lastError: string | null
+  /** Latest public WS EVENTS envelope for presentation (ADR-0019). */
+  lastEngineEvent: { name: string; payload: unknown; seq: number } | null
   connect: (roomId: string) => Promise<void>
   disconnect: () => void
   startGame: () => void
@@ -68,6 +70,7 @@ export const useGame = create<GameState>((set, get) => ({
   view: null,
   chat: [],
   lastError: null,
+  lastEngineEvent: null,
 
   connect: async (roomId) => {
     intentionalClose = false
@@ -127,6 +130,22 @@ export const useGame = create<GameState>((set, get) => ({
         case Msg.Chat:
           set((s) => ({ chat: [...s.chat, env.payload as ChatMessage] }))
           break
+        case Msg.Events: {
+          const name = env.name ?? ''
+          let payload: unknown = env.payload
+          // Backend may send payload as already-parsed object or JSON string.
+          if (typeof payload === 'string') {
+            try { payload = JSON.parse(payload) } catch { /* keep string */ }
+          }
+          set((st) => ({
+            lastEngineEvent: {
+              name,
+              payload,
+              seq: (st.lastEngineEvent?.seq ?? 0) + 1,
+            },
+          }))
+          break
+        }
         case Msg.Error: {
           const p = env.payload as { code?: string; message?: string }
           const silent = p.code === 'must_follow_suit' || p.code === 'not_your_turn' ||
@@ -179,7 +198,7 @@ export const useGame = create<GameState>((set, get) => ({
       ws.onmessage = null
       ws.close()
     }
-    set({ ws: null, connected: false, room: null, view: null, chat: [], lastError: null })
+    set({ ws: null, connected: false, room: null, view: null, chat: [], lastError: null, lastEngineEvent: null })
     localStorage.removeItem('hokm.lastRoom')
     diagInfo('ws', 'disconnect_intentional')
   },

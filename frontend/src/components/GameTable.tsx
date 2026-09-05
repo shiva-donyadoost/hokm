@@ -7,6 +7,8 @@ import { TrickArea } from './TrickArea'
 import { useGame } from '../state/game'
 import { useAuth } from '../state/auth'
 import { ANIM, animDuration } from '../config'
+import { useGameAudio } from '../audio/useGameAudio'
+import { AudioMuteButton } from './AudioMuteButton'
 import { diagInfo, logPlayAttempt, logTurnSnapshot } from '../diagnostics/clientLog'
 import {
   cardKey,
@@ -83,8 +85,10 @@ export function GameTable({ room, view }: GameTableProps) {
   const chat = useGame((s) => s.chat)
   const connected = useGame((s) => s.connected)
   const ws = useGame((s) => s.ws)
+  const lastEngineEvent = useGame((s) => s.lastEngineEvent)
   const myId = useAuth0()
   const narrow = useNarrow()
+  useGameAudio(view, lastEngineEvent)
 
   const [selected, setSelected] = useState<string | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
@@ -505,6 +509,7 @@ export function GameTable({ room, view }: GameTableProps) {
       </div>
 
       {/* Overlays */}
+      <AudioMuteButton className="fixed bottom-2 right-2 z-40" />
       {room.chat_enabled ? (
         <>
           <button
