@@ -14,6 +14,7 @@ COPY frontend/ .
 RUN npm run build
 
 FROM golang:1.27-alpine AS build
+ENV GOPROXY=https://goproxy.cn,direct
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN go mod download

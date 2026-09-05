@@ -253,3 +253,4 @@ below. 7. Commit the fix.
 
 23. Prefer CDN avatar SVG with stable user_id seed and initials fallback.
 24. When patching Windows sources match CRLF; LF-only search fails.
+25. Docker go mod download TLS timeout to proxy.golang.org: set GOPROXY=https://goproxy.cn,direct in the Go Dockerfile build stage (this network). Retry without --no-cache first; only then use a mirror.
