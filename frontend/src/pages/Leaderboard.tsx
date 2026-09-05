@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type StatsEntry } from '../api/client'
+import { PlayerAvatar, avatarSeed } from '../components/PlayerAvatar'
 import { Header } from './Rooms'
 
 export function Leaderboard() {
@@ -31,6 +32,7 @@ export function Leaderboard() {
               <li key={e.user_id} className="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2">
                 <div className="flex items-center gap-3">
                   <span className="text-slate-500 w-6 text-right font-mono">{i + 1}</span>
+                  <PlayerAvatar seed={avatarSeed(e.user_id, e.username)} name={e.username} size="sm" />
                   <div>
                     <p className="font-semibold">{e.username || e.user_id}</p>
                     <p className="text-xs text-slate-400">

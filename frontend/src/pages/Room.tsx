@@ -6,7 +6,7 @@ import { useAuth } from '../state/auth'
 import { useGame } from '../state/game'
 import { GameTable } from '../components/GameTable'
 import { ChatPanel } from '../components/ChatPanel'
-import { CardBack } from '../components/Card'
+import { PlayerAvatar, avatarSeed } from '../components/PlayerAvatar'
 import { Header } from './Rooms'
 import type { RoomMember } from '../protocol/messages'
 
@@ -262,7 +262,11 @@ function LobbyTeams({
         }}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <CardBack size="sm" />
+          {m ? (
+            <PlayerAvatar seed={avatarSeed(m.user_id, m.username)} name={m.username} size="sm" />
+          ) : (
+            <div className="w-7 h-7 rounded-full bg-slate-700/60 border border-dashed border-slate-600 shrink-0" aria-hidden />
+          )}
           <span className="text-sm truncate">
             {m ? (
               <>

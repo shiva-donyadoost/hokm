@@ -248,3 +248,8 @@ below. 7. Commit the fix.
 - Logging: structured JSON logs (slog). No fmt.Println in server code.
 - Errors: wrapped with `%w`, mapped to typed API errors at the HTTP edge.
 - Commit style: Conventional Commits (see H7).
+
+### Player avatars / ADR-0015 (2026-09-05)
+
+23. Prefer CDN avatar SVG with stable user_id seed and initials fallback.
+24. When patching Windows sources match CRLF; LF-only search fails.

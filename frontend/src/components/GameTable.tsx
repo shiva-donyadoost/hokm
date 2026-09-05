@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
 import { Card, CardBack } from './Card'
+import { PlayerAvatar, avatarSeed } from './PlayerAvatar'
 import { ChatPanel } from './ChatPanel'
 import { TrickArea } from './TrickArea'
 import { useGame } from '../state/game'
@@ -411,14 +412,21 @@ export function GameTable({ room, view }: GameTableProps) {
 
         {/* Overlapping hand: fan on desktop, flat row on mobile (ADR-0013). */}
         <div className="flex flex-col items-center gap-1 pb-2">
-          <div
-            className={`px-2 py-1 rounded-full text-xs font-semibold max-w-[90vw] truncate
+          <div className="flex items-center gap-2 max-w-[90vw]">
+            <PlayerAvatar
+              seed={avatarSeed(self?.user_id ?? myId, self?.username)}
+              name={self?.username ?? "you"}
+              size="sm"
+            />
+            <div
+              className={`px-2 py-1 rounded-full text-xs font-semibold truncate
               ${actingSeat === view.you ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-200'}
               ${view.hakem === view.you ? 'ring-2 ring-amber-300' : ''}`}
-          >
-            {view.hakem === view.you ? '[H] ' : ''}
-            {self ? self.username : 'you'}
-            <span className="ml-1 text-[10px] font-bold opacity-80">{teamTricks(view.you)}</span>
+            >
+              {view.hakem === view.you ? '[H] ' : ''}
+              {self ? self.username : 'you'}
+              <span className="ml-1 text-[10px] font-bold opacity-80">{teamTricks(view.you)}</span>
+            </div>
           </div>
           <div
             className={`text-xs px-2 py-0.5 rounded-full ${
@@ -557,6 +565,11 @@ function SeatPlate({ member, cardCount, isTurn, isHakem, deadline, tricks, hideH
 }) {
   return (
     <div className="flex flex-col gap-1 items-center max-w-24 sm:max-w-36">
+      <PlayerAvatar
+        seed={avatarSeed(member?.user_id, member?.username)}
+        name={member?.username ?? ""}
+        size="sm"
+      />
       <div
         className={`px-2 py-1 rounded-full text-xs font-semibold truncate
           ${isTurn ? 'bg-amber-400 text-slate-900 animate-pulse' : 'bg-slate-800 text-slate-200'}

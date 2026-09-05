@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type StatsEntry } from '../api/client'
 import { useAuth } from '../state/auth'
+import { PlayerAvatar, avatarSeed } from '../components/PlayerAvatar'
 import { Header } from './Rooms'
 
 export function Profile() {
@@ -40,9 +41,7 @@ export function Profile() {
       <Header title="Profile" />
       <section className="card">
         <div className="flex items-center gap-4 mb-4">
-          <div className="w-16 h-16 rounded-full bg-teal-700 flex items-center justify-center text-2xl font-black">
-            {user.username.slice(0, 2).toUpperCase()}
-          </div>
+          <PlayerAvatar seed={avatarSeed(user.id, user.username)} name={user.username} size="lg" />
           <div>
             <p className="text-lg font-bold">{user.username}</p>
             <p className="text-sm text-slate-400">{user.email}</p>
